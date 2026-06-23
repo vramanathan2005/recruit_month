@@ -1,0 +1,6 @@
+probability_bucket,known_events,decommit_or_flip_events,actual_decommit_flip_rate,average_predicted_probability
+0-10%,2920,196,0.0671,0.0546
+10-20%,3014,385,0.1277,0.1492
+20-30%,2609,651,0.2495,0.2475
+30-40%,1936,662,0.3419,0.3461
+40%+,2152,1108,0.5149,0.5257

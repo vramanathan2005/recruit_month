@@ -1,0 +1,4 @@
+sample,rows,decommit_or_flip_events,stick_events,actual_decommit_flip_rate,average_predicted_probability,auc,brier_score,log_loss
+train_2022_2024,6385,1483,4902,0.2323,0.2314,0.7768,0.1447,0.4505
+holdout_2025,3088,719,2369,0.2328,0.2464,0.7228,0.1568,0.487
+live_2026,3158,800,2358,0.2533,0.259,0.7159,0.1682,0.5084

@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Commit Timing</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --orange: #BF5700;
+    --orange-mid: rgba(191,87,0,0.5);
+    --orange-faint: rgba(191,87,0,0.12);
+    --white: #ffffff;
+    --off: #FAF7F5;
+    --g1: #F2EDE9;
+    --g2: #C8BCB2;
+    --g3: #7A6A5E;
+    --dark: #1A120C;
+    --red: #C0392B;
+    --red-faint: rgba(192,57,43,0.12);
+    --green: #2E7D32;
+    --green-faint: rgba(46,125,50,0.12);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--off); color: var(--dark); }
+
+  header {
+    background: var(--orange);
+    color: #fff;
+    padding: 2rem;
+  }
+  header small {
+    display: block;
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    opacity: 0.65;
+    margin-bottom: 0.4rem;
+  }
+  header h1 {
+    font-size: clamp(1.5rem, 4vw, 2.2rem);
+    font-weight: 900;
+    letter-spacing: -0.025em;
+    line-height: 1.1;
+  }
+
+  main {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 1.8rem 1.5rem 4rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.6rem;
+  }
+
+  /* ── big stats ── */
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1rem;
+  }
+  @media(max-width:700px){ .stats { grid-template-columns: repeat(2,1fr); } }
+
+  .stat {
+    background: var(--white);
+    border-radius: 12px;
+    padding: 1.2rem 1.3rem;
+    border-left: 5px solid var(--orange);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+  }
+  .stat .lbl {
+    font-size: 0.62rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--g3);
+    margin-bottom: 0.25rem;
+  }
+  .stat .num {
+    font-size: clamp(1.8rem,4vw,2.6rem);
+    font-weight: 900;
+    color: var(--orange);
+    line-height: 1;
+    letter-spacing: -0.03em;
+  }
+  .stat .caption { margin-top: 0.3rem; font-size: 0.75rem; color: var(--g3); line-height: 1.4; }
+
+  /* ── cards ── */
+  .card {
+    background: var(--white);
+    border-radius: 12px;
+    padding: 1.5rem 1.5rem 1.2rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+  }
+  .card h2 { font-size: 0.88rem; font-weight: 800; margin-bottom: 0.15rem; }
+  .card .sub { font-size: 0.75rem; color: var(--g3); margin-bottom: 1.1rem; }
+  .chart-wrap { position: relative; width: 100%; }
+
+  /* ── two-col ── */
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  @media(max-width:680px){ .two-col { grid-template-columns: 1fr; } }
+
+  /* ── "pick your date" comparison ── */
+  .date-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 0.75rem;
+  }
+  @media(max-width:680px){ .date-grid { grid-template-columns: repeat(2,1fr); } }
+
+  .date-block {
+    border-radius: 10px;
+    padding: 1rem 0.9rem;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+  }
+  .date-block.good  { background: var(--green-faint); border: 1.5px solid rgba(46,125,50,0.3); }
+  .date-block.ok    { background: var(--orange-faint); border: 1.5px solid rgba(191,87,0,0.25); }
+  .date-block.bad   { background: var(--red-faint); border: 1.5px solid rgba(192,57,43,0.3); }
+
+  .date-block .date-lbl { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+  .date-block.good .date-lbl  { color: var(--green); }
+  .date-block.ok   .date-lbl  { color: var(--orange); }
+  .date-block.bad  .date-lbl  { color: var(--red); }
+
+  .date-block .count { font-size: 2.2rem; font-weight: 900; line-height: 1; letter-spacing: -0.03em; }
+  .date-block.good .count { color: var(--green); }
+  .date-block.ok   .count { color: var(--orange); }
+  .date-block.bad  .count { color: var(--red); }
+
+  .date-block .unit { font-size: 0.65rem; color: var(--g3); }
+  .date-block .tag {
+    margin-top: 0.2rem;
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.2rem 0.5rem;
+    border-radius: 20px;
+    align-self: center;
+  }
+  .date-block.good .tag { background: rgba(46,125,50,0.15); color: var(--green); }
+  .date-block.ok   .tag { background: rgba(191,87,0,0.15);  color: var(--orange); }
+  .date-block.bad  .tag { background: rgba(192,57,43,0.15); color: var(--red); }
+
+  /* ── crowd meter ── */
+  .meter-wrap { display: flex; flex-direction: column; gap: 0.6rem; }
+  .meter-row { display: flex; align-items: center; gap: 0.7rem; }
+  .meter-row .m-lbl { font-size: 0.75rem; font-weight: 600; width: 70px; flex-shrink: 0; }
+  .meter-bar-bg { flex: 1; height: 22px; background: var(--g1); border-radius: 4px; overflow: hidden; }
+  .meter-bar { height: 100%; border-radius: 4px; display: flex; align-items: center; padding-left: 8px; }
+  .meter-bar span { font-size: 0.7rem; font-weight: 700; color: #fff; white-space: nowrap; }
+  .meter-row .m-val { font-size: 0.8rem; font-weight: 800; width: 36px; text-align: right; flex-shrink: 0; }
+
+  footer { text-align: center; font-size: 0.65rem; color: var(--g2); padding-bottom: 2rem; }
+</style>
+</head>
+<body>
+
+<header>
+  <small>247Sports · 14,590 verified commits · Classes 2022–2026</small>
+  <h1>Commit earlier. Stand out more.</h1>
+</header>
+
+<main>
+
+  <!-- Stats -->
+  <div class="stats">
+    <div class="stat">
+      <div class="lbl">Commits on July 4</div>
+      <div class="num">155</div>
+      <div class="caption">every single year</div>
+    </div>
+    <div class="stat">
+      <div class="lbl">June total</div>
+      <div class="num">3,481</div>
+      <div class="caption">vs. 1,654 in July</div>
+    </div>
+    <div class="stat">
+      <div class="lbl">June 1–7 avg/day</div>
+      <div class="num">53</div>
+      <div class="caption">lowest of summer</div>
+    </div>
+    <div class="stat">
+      <div class="lbl">Late June avg/day</div>
+      <div class="num">180</div>
+      <div class="caption">June 21–27</div>
+    </div>
+  </div>
+
+  <!-- Monthly bar -->
+  <div class="card">
+    <h2>Commits by Month</h2>
+    <div class="sub">June is the busiest month of the year — not July.</div>
+    <div class="chart-wrap" style="height:240px">
+      <canvas id="monthlyChart"></canvas>
+    </div>
+  </div>
+
+  <!-- Daily summer -->
+  <div class="card">
+    <h2>Daily Traffic — May through August</h2>
+    <div class="sub">Orange = June &nbsp;·&nbsp; Red = July 4 &nbsp;·&nbsp; Gray = May, July, August</div>
+    <div class="chart-wrap" style="height:260px">
+      <canvas id="dailyChart"></canvas>
+    </div>
+  </div>
+
+  <!-- Pick your date -->
+  <div class="card">
+    <h2>Pick Your Date — See the Crowd</h2>
+    <div class="sub">How many other recruits are announcing the same day?</div>
+    <div class="date-grid">
+      <div class="date-block good">
+        <div class="date-lbl">June 5</div>
+        <div class="count">61</div>
+        <div class="unit">others that day</div>
+        <div class="tag">Stand out</div>
+      </div>
+      <div class="date-block good">
+        <div class="date-lbl">June 10</div>
+        <div class="count">99</div>
+        <div class="unit">others that day</div>
+        <div class="tag">Stand out</div>
+      </div>
+      <div class="date-block ok">
+        <div class="date-lbl">June 25</div>
+        <div class="count">201</div>
+        <div class="unit">others that day</div>
+        <div class="tag">Crowded</div>
+      </div>
+      <div class="date-block bad">
+        <div class="date-lbl">July 4</div>
+        <div class="count">155</div>
+        <div class="unit">others that day</div>
+        <div class="tag">Lost in noise</div>
+      </div>
+      <div class="date-block good">
+        <div class="date-lbl">Aug 1</div>
+        <div class="count">85</div>
+        <div class="unit">others that day</div>
+        <div class="tag">Less competition</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Two col: crowd meter + weekly chart -->
+  <div class="two-col">
+
+    <div class="card">
+      <h2>Crowd Meter by Month</h2>
+      <div class="sub">Relative traffic — June dominates.</div>
+      <div class="meter-wrap" style="margin-top:0.5rem">
+        <div class="meter-row">
+          <div class="m-lbl">January</div>
+          <div class="meter-bar-bg"><div class="meter-bar" style="width:32%;background:var(--g2)"><span>1,099</span></div></div>
+        </div>
+        <div class="meter-row">
+          <div class="m-lbl">February</div>
+          <div class="meter-bar-bg"><div class="meter-bar" style="width:38%;background:var(--g2)"><span>1,315</span></div></div>
+        </div>
+        <div class="meter-row">
+          <div class="m-lbl">March</div>
+          <div class="meter-bar-bg"><div class="meter-bar" style="width:12%;background:var(--g2)"><span>414</span></div></div>
+        </div>
+        <div class="meter-row">
+          <div class="m-lbl">April</div>
+          <div class="meter-bar-bg"><div class="meter-bar" style="width:22%;background:var(--g2)"><span>761</span></div></div>
+        </div>
+        <div class="meter-row">
+          <div class="m-lbl">May</div>
+          <div class="meter-bar-bg"><div class="meter-bar" style="width:17%;background:var(--g2)"><span>581</span></div></div>
+        </div>
+        <div class="meter-row">
+          <div class="m-lbl" style="font-weight:800;color:var(--orange)">June</div>
+          <div class="meter-bar-bg"><div class="meter-bar" style="width:100%;background:var(--orange)"><span>3,481</span></div></div>
+        </div>
+        <div class="meter-row">
+          <div class="m-lbl">July</div>
+          <div class="meter-bar-bg"><div class="meter-bar" style="width:48%;background:var(--orange-mid)"><span>1,654</span></div></div>
+        </div>
+        <div class="meter-row">
+          <div class="m-lbl">August</div>
+          <div class="meter-bar-bg"><div class="meter-bar" style="width:22%;background:var(--g2)"><span>761</span></div></div>
+        </div>
+        <div class="meter-row">
+          <div class="m-lbl">September</div>
+          <div class="meter-bar-bg"><div class="meter-bar" style="width:12%;background:var(--g2)"><span>420</span></div></div>
+        </div>
+        <div class="meter-row">
+          <div class="m-lbl">October</div>
+          <div class="meter-bar-bg"><div class="meter-bar" style="width:17%;background:var(--g2)"><span>603</span></div></div>
+        </div>
+        <div class="meter-row">
+          <div class="m-lbl">November</div>
+          <div class="meter-bar-bg"><div class="meter-bar" style="width:27%;background:var(--g2)"><span>927</span></div></div>
+        </div>
+        <div class="meter-row">
+          <div class="m-lbl">December</div>
+          <div class="meter-bar-bg"><div class="meter-bar" style="width:74%;background:var(--orange-mid)"><span>2,574</span></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>June: First Half vs. Second Half</h2>
+      <div class="sub">Traffic nearly triples from early to late June.</div>
+      <div class="chart-wrap" style="height:280px">
+        <canvas id="juneChart"></canvas>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Three new decommit insight charts -->
+  <div class="two-col">
+    <div class="card">
+      <h2>Decommit Rate by Star Rating</h2>
+      <div class="sub">Higher-rated recruits are courted by more schools — and flip more often.</div>
+      <div class="chart-wrap" style="height:220px">
+        <canvas id="starChart"></canvas>
+      </div>
+    </div>
+    <div class="card">
+      <h2>When Decommits Happen by Month</h2>
+      <div class="sub">December and November spike — kids flip at the last minute.</div>
+      <div class="chart-wrap" style="height:220px">
+        <canvas id="decMonthChart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>How Long Commitments Last Before a Flip</h2>
+    <div class="sub">Nearly half of all decommits happen 3–6 months after the original commitment. Median: 144 days.</div>
+    <div class="chart-wrap" style="height:220px">
+      <canvas id="durationChart"></canvas>
+    </div>
+  </div>
+
+  <!-- Decommit section -->
+  <div class="card">
+    <h2>Silent Commits Flip. Public Ones Stick.</h2>
+    <div class="sub">3,089 real decommits tracked across 8,024 players · Classes 2022–2025</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;margin-top:0.5rem">
+      <div class="chart-wrap" style="height:280px">
+        <canvas id="decommitChart"></canvas>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:0.8rem;justify-content:center">
+        <div class="date-block bad" style="border-radius:10px;padding:1rem 1.2rem">
+          <div class="date-lbl">12+ months out</div>
+          <div class="count" style="font-size:2.4rem">50%</div>
+          <div class="unit">decommit at least once</div>
+        </div>
+        <div class="date-block ok" style="border-radius:10px;padding:1rem 1.2rem">
+          <div class="date-lbl">3–6 months out</div>
+          <div class="count" style="font-size:2.4rem">23%</div>
+          <div class="unit">decommit at least once</div>
+        </div>
+        <div class="date-block good" style="border-radius:10px;padding:1rem 1.2rem">
+          <div class="date-lbl">0–3 months out</div>
+          <div class="count" style="font-size:2.4rem">13%</div>
+          <div class="unit">decommit at least once</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<footer>247Sports Composite · High School Football · 2022–2026 · 17,561 recruits · 36,381 timeline events</footer>
+
+<script>
+const ORANGE     = '#BF5700';
+const ORANGE_MID = 'rgba(191,87,0,0.5)';
+const GRAY       = 'rgba(120,100,88,0.22)';
+const GRAY_B     = 'rgba(120,100,88,0.4)';
+const RED        = '#C0392B';
+
+// Monthly
+new Chart(document.getElementById('monthlyChart'), {
+  type: 'bar',
+  data: {
+    labels: ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'],
+    datasets: [{
+      data: [1099,1315,414,761,581,3481,1654,761,420,603,927,2574],
+      backgroundColor: [GRAY,GRAY,GRAY,GRAY,GRAY,ORANGE,ORANGE_MID,GRAY,GRAY,GRAY,GRAY,ORANGE_MID],
+      borderColor:     [GRAY_B,GRAY_B,GRAY_B,GRAY_B,GRAY_B,ORANGE,ORANGE,GRAY_B,GRAY_B,GRAY_B,GRAY_B,ORANGE],
+      borderWidth: 1.5, borderRadius: 5,
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => ` ${c.parsed.y.toLocaleString()} commits` } } },
+    scales: {
+      x: { grid: { display: false }, ticks: { color: '#7A6A5E', font: { size: 12, weight: '600' } } },
+      y: { grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { color: '#7A6A5E', font: { size: 11 } }, beginAtZero: true }
+    }
+  }
+});
+
+// Daily summer
+const raw = {
+  '05-01':32,'05-02':32,'05-03':21,'05-04':14,'05-05':15,'05-06':14,'05-07':19,'05-08':21,'05-09':16,'05-10':19,
+  '05-11':15,'05-12':23,'05-13':26,'05-14':23,'05-15':22,'05-16':12,'05-17':17,'05-18':12,'05-19':14,'05-20':24,
+  '05-21':29,'05-22':27,'05-23':22,'05-24':24,'05-25':18,'05-26':11,'05-27':13,'05-28':10,'05-29':8,'05-30':9,'05-31':19,
+  '06-01':45,'06-02':50,'06-03':41,'06-04':46,'06-05':61,'06-06':55,'06-07':72,'06-08':78,'06-09':110,'06-10':99,
+  '06-11':95,'06-12':110,'06-13':96,'06-14':115,'06-15':116,'06-16':129,'06-17':105,'06-18':131,'06-19':122,'06-20':129,
+  '06-21':178,'06-22':193,'06-23':198,'06-24':192,'06-25':201,'06-26':204,'06-27':162,'06-28':145,'06-29':92,'06-30':111,
+  '07-01':156,'07-02':84,'07-03':54,'07-04':155,'07-05':72,'07-06':51,'07-07':53,'07-08':61,'07-09':48,'07-10':50,
+  '07-11':36,'07-12':57,'07-13':31,'07-14':39,'07-15':40,'07-16':35,'07-17':28,'07-18':32,'07-19':27,'07-20':33,
+  '07-21':30,'07-22':38,'07-23':30,'07-24':18,'07-25':37,'07-26':38,'07-27':52,'07-28':53,'07-29':57,'07-30':66,'07-31':93,
+  '08-01':85,'08-02':68,'08-03':34,'08-04':37,'08-05':35,'08-06':32,'08-07':32,'08-08':33,'08-09':19,'08-10':34,
+  '08-11':26,'08-12':33,'08-13':33,'08-14':21,'08-15':21,'08-16':20,'08-17':18,'08-18':21,'08-19':12,'08-20':20,
+  '08-21':16,'08-22':11,'08-23':11,'08-24':11,'08-25':17,'08-26':19,'08-27':8,'08-28':6,'08-29':7,'08-30':13,'08-31':8
+};
+
+const mName = {'05':'May','06':'Jun','07':'Jul','08':'Aug'};
+const labels=[], data=[], bg=[], bd=[];
+for (const [k,v] of Object.entries(raw)) {
+  const [m,d] = k.split('-');
+  labels.push(`${mName[m]} ${parseInt(d)}`);
+  data.push(v);
+  if (k==='07-04')   { bg.push(RED);        bd.push(RED); }
+  else if (m==='06') { bg.push(ORANGE_MID);  bd.push(ORANGE); }
+  else               { bg.push(GRAY);        bd.push(GRAY_B); }
+}
+const j4 = labels.indexOf('Jul 4');
+
+new Chart(document.getElementById('dailyChart'), {
+  type: 'bar',
+  data: { labels, datasets: [{ data, backgroundColor: bg, borderColor: bd, borderWidth: 1, borderRadius: 3 }] },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: { callbacks: { label: c => c.dataIndex===j4 ? ` ${c.parsed.y} — July 4th` : ` ${c.parsed.y} commits` } }
+    },
+    scales: {
+      x: {
+        grid: { display: false },
+        ticks: {
+          color: c => labels[c.index]==='Jul 4' ? RED : '#7A6A5E',
+          font: c => ({ size: 10, weight: labels[c.index]==='Jul 4' ? '700' : '400' }),
+          maxRotation: 45, autoSkip: true, maxTicksLimit: 26
+        }
+      },
+      y: { grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { color: '#7A6A5E', font: { size: 11 } }, beginAtZero: true }
+    }
+  }
+});
+
+// June first vs second half — week buckets
+new Chart(document.getElementById('juneChart'), {
+  type: 'bar',
+  data: {
+    labels: ['Jun 1–7','Jun 8–14','Jun 15–21','Jun 22–28','Jun 29–30'],
+    datasets: [{
+      label: 'Total commits',
+      data: [
+        45+50+41+46+61+55+72,
+        78+110+99+95+110+96+115,
+        116+129+105+131+122+129+178,
+        193+198+192+201+204+162+145,
+        92+111
+      ],
+      backgroundColor: [
+        'rgba(46,125,50,0.6)',
+        'rgba(46,125,50,0.4)',
+        ORANGE_MID,
+        ORANGE,
+        ORANGE_MID,
+      ],
+      borderColor: ['#2E7D32','#2E7D32',ORANGE,ORANGE,ORANGE],
+      borderWidth: 1.5, borderRadius: 6,
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => ` ${c.parsed.y} commits` } } },
+    scales: {
+      x: { grid: { display: false }, ticks: { color: '#7A6A5E', font: { size: 11, weight: '600' } } },
+      y: { grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { color: '#7A6A5E', font: { size: 11 } }, beginAtZero: true }
+    }
+  }
+});
+
+// Decommit rate by star
+new Chart(document.getElementById('starChart'), {
+  type: 'bar',
+  data: {
+    labels: ['5-star','4-star','3-star','2-star/NR'],
+    datasets: [{
+      data: [29.2, 28.6, 19.8, 5.4],
+      backgroundColor: [RED, 'rgba(192,57,43,0.6)', ORANGE_MID, GRAY],
+      borderColor:     [RED, RED, ORANGE, GRAY_B],
+      borderWidth: 1.5, borderRadius: 6,
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => ` ${c.parsed.y}% decommit rate` } } },
+    scales: {
+      x: { grid: { display: false }, ticks: { color: '#7A6A5E', font: { size: 12, weight: '600' } } },
+      y: { grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { color: '#7A6A5E', callback: v => v+'%' }, beginAtZero: true, max: 40 }
+    }
+  }
+});
+
+// Decommit by month
+new Chart(document.getElementById('decMonthChart'), {
+  type: 'bar',
+  data: {
+    labels: ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'],
+    datasets: [{
+      data: [143,98,37,45,51,155,86,79,82,212,373,620],
+      backgroundColor: ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].map(
+        m => ['Nov','Dec'].includes(m) ? RED : m==='Jun' ? ORANGE_MID : GRAY
+      ),
+      borderColor: ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].map(
+        m => ['Nov','Dec'].includes(m) ? RED : m==='Jun' ? ORANGE : GRAY_B
+      ),
+      borderWidth: 1.5, borderRadius: 5,
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => ` ${c.parsed.y} decommits` } } },
+    scales: {
+      x: { grid: { display: false }, ticks: { color: '#7A6A5E', font: { size: 11, weight: '600' } } },
+      y: { grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { color: '#7A6A5E' }, beginAtZero: true }
+    }
+  }
+});
+
+// Duration commit → decommit
+new Chart(document.getElementById('durationChart'), {
+  type: 'bar',
+  data: {
+    labels: ['< 1 month','1–3 months','3–6 months','6–12 months','12+ months'],
+    datasets: [{
+      data: [5.9, 17.7, 46.4, 24.9, 5.1],
+      backgroundColor: [GRAY, ORANGE_MID, RED, ORANGE_MID, GRAY],
+      borderColor:     [GRAY_B, ORANGE, RED, ORANGE, GRAY_B],
+      borderWidth: 1.5, borderRadius: 6,
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => ` ${c.parsed.y}% of all decommits` } } },
+    scales: {
+      x: { grid: { display: false }, ticks: { color: '#7A6A5E', font: { size: 12, weight: '600' } } },
+      y: { grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { color: '#7A6A5E', callback: v => v+'%' }, beginAtZero: true, max: 55 }
+    }
+  }
+});
+
+// Decommit rate by timing
+new Chart(document.getElementById('decommitChart'), {
+  type: 'bar',
+  data: {
+    labels: ['0–3 months', '3–6 months', '6–9 months', '9–12 months', '12+ months'],
+    datasets: [{
+      label: 'Decommit rate',
+      data: [13.1, 22.8, 22.9, 35.6, 50.2],
+      backgroundColor: [
+        'rgba(46,125,50,0.6)',
+        'rgba(191,87,0,0.4)',
+        'rgba(191,87,0,0.55)',
+        'rgba(192,57,43,0.5)',
+        '#C0392B',
+      ],
+      borderColor: ['#2E7D32', ORANGE, ORANGE, RED, RED],
+      borderWidth: 1.5,
+      borderRadius: 6,
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: { callbacks: { label: c => ` ${c.parsed.y}% decommit rate` } }
+    },
+    scales: {
+      x: { grid: { display: false }, ticks: { color: '#7A6A5E', font: { size: 11, weight: '600' } } },
+      y: {
+        grid: { color: 'rgba(0,0,0,0.05)' },
+        ticks: { color: '#7A6A5E', font: { size: 11 }, callback: v => v + '%' },
+        beginAtZero: true, max: 60,
+        title: { display: true, text: 'committed before signing day', color: '#7A6A5E', font: { size: 10 } }
+      }
+    }
+  }
+});
+</script>
+</body>
+</html>
