@@ -1898,7 +1898,7 @@ def sidebar_filters(target: pd.DataFrame, national: pd.DataFrame, all_commits: p
                 key="sidebar_distance",
             ),
             "min_flip": st.slider("Minimum flip risk", 0, 100, 0, 1, key="sidebar_flip"),
-            "max_rows": st.slider("Rows shown", 25, 500, 100, 25, key="sidebar_rows"),
+            "max_rows": st.slider("Rows shown", 25, 1500, 1500, 25, key="sidebar_rows_full_board"),
             "only_activity": st.toggle(
                 "Only show outside activity after commit",
                 value=False,
