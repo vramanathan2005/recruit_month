@@ -1,5 +1,5 @@
 event_strength_bucket,commitment_events_with_known_outcome,decommit_or_flip_events,decommit_or_flip_rate,stick_rate
-Weak / Attack,829,460,0.5549,0.4451
-Vulnerable,5431,1816,0.3344,0.6656
-Stable / Monitor,3415,599,0.1754,0.8246
-Strong,3046,217,0.0712,0.9288
+Weak / Attack,820,451,0.55,0.45
+Vulnerable,5432,1814,0.3339,0.6661
+Stable / Monitor,3410,598,0.1754,0.8246
+Strong,3044,216,0.071,0.929

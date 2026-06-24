@@ -136,11 +136,20 @@ class Fetcher:
         if elapsed < self.delay:
             time.sleep(self.delay - elapsed)
 
-        response = self.session.get(url, params=params, timeout=30)
-        self.last_fetch = time.time()
-        response.raise_for_status()
-        cache_file.write_text(response.text, encoding="utf-8")
-        return response.text
+        last_error: requests.RequestException | None = None
+        for attempt in range(4):
+            try:
+                response = self.session.get(url, params=params, timeout=(10, 60))
+                self.last_fetch = time.time()
+                response.raise_for_status()
+                cache_file.write_text(response.text, encoding="utf-8")
+                return response.text
+            except requests.RequestException as error:
+                last_error = error
+                if attempt == 3:
+                    break
+                time.sleep(2 ** attempt)
+        raise last_error or requests.RequestException(f"Failed to fetch {url}")
 
 
 def cache_path_for(cache_dir: Path, url: str, params: dict[str, str] | None = None) -> Path:
@@ -154,10 +163,19 @@ def fetch_detail_html(cache_dir: Path, url: str, refresh: bool = False) -> str:
     cache_file = cache_path_for(cache_dir, url)
     if cache_file.exists() and not refresh:
         return cache_file.read_text(encoding="utf-8")
-    response = requests.get(url, headers=HEADERS, timeout=(5, 15))
-    response.raise_for_status()
-    cache_file.write_text(response.text, encoding="utf-8")
-    return response.text
+    last_error: requests.RequestException | None = None
+    for attempt in range(4):
+        try:
+            response = requests.get(url, headers=HEADERS, timeout=(10, 60))
+            response.raise_for_status()
+            cache_file.write_text(response.text, encoding="utf-8")
+            return response.text
+        except requests.RequestException as error:
+            last_error = error
+            if attempt == 3:
+                break
+            time.sleep(2 ** attempt)
+    raise last_error or requests.RequestException(f"Failed to fetch {url}")
 
 
 def first_attr(nodes: Iterable, attr: str) -> str:

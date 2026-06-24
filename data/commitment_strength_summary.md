@@ -1,24 +1,24 @@
 # Commitment Strength V1
 
-- Scored recruits: 18722
-- With 247 commitment date: 14970
+- Scored recruits: 18917
+- With 247 commitment date: 15730
 - Score meaning: `100` is strongest, `0` is weakest / most vulnerable.
 
 | Tier | Count |
 | --- | ---: |
-| Strong | 4693 |
-| Stable / Monitor | 8486 |
-| Vulnerable | 4910 |
-| Weak / Attack | 633 |
+| Strong | 4773 |
+| Stable / Monitor | 8209 |
+| Vulnerable | 5295 |
+| Weak / Attack | 640 |
 
 | Class | Recruits |
 | --- | ---: |
-| 2022 | 3296 |
-| 2023 | 3420 |
-| 2024 | 3650 |
-| 2025 | 3564 |
+| 2022 | 3285 |
+| 2023 | 3406 |
+| 2024 | 3641 |
+| 2025 | 3563 |
 | 2026 | 3224 |
-| 2027 | 1568 |
+| 2027 | 1798 |
 
 ## Lowest 20 Scores
 
@@ -41,9 +41,9 @@
 | Karle Lacey Jr. | 2025 | QB | Texas | 27 | history 10, process 2, post 0, crowding 10, time 45 |
 | Lloyd Jones III | 2025 | QB | Texas Tech | 27 | history 10, process 2, post 0, crowding 10, time 45 |
 | Keisean Henderson | 2026 | QB | Houston | 27 | history 10, process 1, post 0, crowding 10, time 45 |
-| Princeton Uwaifo | 2027 | OT | Tennessee | 27 | history 10, process 4, post 0, crowding 10, time 45 |
 | Bennett Christian | 2022 | TE | Ohio State | 28 | history 10, process 1, post 0, crowding 10, time 45 |
 | Joshua Bates | 2023 | IOL | Oklahoma | 28 | history 10, process 1, post 0, crowding 10, time 45 |
+| Jack Endean | 2023 | OT | Oklahoma State | 28 | history 10, process 2, post 0, crowding 10, time 45 |
 
 Base score uses pre-outcome signals only. Live score separately adjusts for post-commit offers/visits.
 Coach stability and social activity still need enrichment tables before they can be scored.
