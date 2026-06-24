@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import html
 import math
 import re
@@ -691,30 +690,23 @@ def number_to_float(series: pd.Series) -> pd.Series:
     return pd.to_numeric(series, errors="coerce")
 
 
-def cache_file_for_url(url: str) -> Path:
-    key = url + "?"
-    return DATA_DIR / "cache" / (hashlib.sha1(key.encode("utf-8")).hexdigest() + ".html")
-
-
 def player_initials(name: object) -> str:
     parts = [part for part in str(name or "").replace(".", "").split() if part]
     return "".join(part[0].upper() for part in parts[:2]) or "247"
 
 
+@st.cache_data(show_spinner=False)
+def load_player_image_index() -> dict[str, str]:
+    path = DATA_DIR / "player_images.csv"
+    if not path.exists():
+        return {}
+    images = pd.read_csv(path, dtype=str).fillna("")
+    return dict(zip(images["player_id"], images["image_url"]))
+
+
 def player_image_url(profile_url: object) -> str:
-    url = str(profile_url or "").strip().rstrip("/")
-    if not url:
-        return ""
-    timeline_cache = cache_file_for_url(url + "/timelineevents/")
-    if not timeline_cache.exists():
-        return ""
-    text = timeline_cache.read_text(encoding="utf-8", errors="ignore")
-    match = re.search(
-        r'<div class="mini-header-comp__main-info">\s*<a[^>]*>\s*<img[^>]+src="([^"]+)"',
-        text,
-        re.IGNORECASE,
-    )
-    return html.unescape(match.group(1)) if match else ""
+    match = re.search(r"-(\d+)(?:/|$)", str(profile_url or ""))
+    return load_player_image_index().get(match.group(1), "") if match else ""
 
 
 def avatar_html(image_url: str, name: object, large: bool = False) -> str:
