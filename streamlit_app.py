@@ -1852,8 +1852,10 @@ def unique_values(*series: pd.Series) -> list[str]:
     return sorted(set(values))
 
 
-def sidebar_filters(target: pd.DataFrame, national: pd.DataFrame) -> dict[str, object]:
-    distance_values = unique_values(target["target_distance_bucket"], national["distance_bucket"])
+def sidebar_filters(target: pd.DataFrame, national: pd.DataFrame, all_commits: pd.DataFrame) -> dict[str, object]:
+    distance_values = unique_values(
+        target["target_distance_bucket"], national["distance_bucket"], all_commits["distance_bucket"]
+    )
     confidence_values = unique_values(target["data_confidence"]) if "data_confidence" in target.columns else []
 
     with st.sidebar:
@@ -1861,12 +1863,12 @@ def sidebar_filters(target: pd.DataFrame, national: pd.DataFrame) -> dict[str, o
         filters = {
             "board_view": st.selectbox(
                 "Show",
-                ["Texas Targets", "National Weak Commits"],
+                ["All 2027 Commitments", "Texas Targets", "National Weak Commits"],
                 key="sidebar_board_view",
             ),
             "positions": st.multiselect(
                 "Position",
-                unique_values(target["position"], national["position"]),
+                unique_values(target["position"], national["position"], all_commits["position"]),
                 key="sidebar_position",
             ),
             "tiers": st.multiselect(
@@ -1877,12 +1879,12 @@ def sidebar_filters(target: pd.DataFrame, national: pd.DataFrame) -> dict[str, o
             ),
             "states": st.multiselect(
                 "Home state",
-                unique_values(target["home_state"], national["home_state"]),
+                unique_values(target["home_state"], national["home_state"], all_commits["home_state"]),
                 key="sidebar_state",
             ),
             "teams": st.multiselect(
                 "Committed school",
-                unique_values(target["committed_team"], national["committed_team"]),
+                unique_values(target["committed_team"], national["committed_team"], all_commits["committed_team"]),
                 key="sidebar_team",
             ),
             "confidence": st.multiselect(
@@ -2537,27 +2539,41 @@ def main() -> None:
     inject_theme()
     target = prepare_board(load_csv(str(BOARD_DIR / "target_board_texas_2027.csv")))
     national = prepare_board(load_csv(str(BOARD_DIR / "boss_view_2027_power_team_commits.csv")))
+    all_commits = prepare_board(load_csv(str(BOARD_DIR / "flip_board_all_commits.csv")))
+    all_commits = all_commits[all_commits["class_year"].astype(str) == "2027"].copy()
     rolling_backtest = load_csv(str(DATA_DIR / "flip_model_rolling_backtest.csv"))
     timeline_events = load_csv(str(DATA_DIR / "timeline_events.csv"))
 
     hero()
-    filters = sidebar_filters(target, national)
+    filters = sidebar_filters(target, national, all_commits)
     texas_mode = filters["board_view"] == "Texas Targets"
-    board = target if texas_mode else national
+    board = (
+        target
+        if texas_mode
+        else national
+        if filters["board_view"] == "National Weak Commits"
+        else all_commits
+    )
     filtered = filter_board(board, filters, texas_mode=texas_mode)
 
-    section_title("Texas Target Board" if texas_mode else "National Weak Commits")
+    board_title = filters["board_view"]
+    section_title(board_title)
     briefing_box(
         "What am I looking at?",
-        "Texas Targets puts Texas-relevant recruits first. National Weak Commits shows the wider market. "
-        "Use the sidebar to filter by position, school, geography, outside activity, or move risk.",
+        "All 2027 Commitments is the complete board. Texas Targets puts Texas-relevant recruits first. "
+        "National Weak Commits is the P4 market. Use the sidebar to narrow by position, school, geography, "
+        "outside activity, or move risk.",
     )
     metric_row(filtered, texas_mode=texas_mode)
     st.caption("Sorted by move risk. Position is a filter, so there is no separate position-room page.")
     export_board(
         filtered,
         "Download this list",
-        "texas_targets.csv" if texas_mode else "national_weak_commits.csv",
+        "texas_targets.csv"
+        if texas_mode
+        else "national_weak_commits.csv"
+        if filters["board_view"] == "National Weak Commits"
+        else "all_2027_commitments.csv",
         "export_current_board",
     )
 
