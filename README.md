@@ -240,3 +240,17 @@ of the Texas opportunity board and marks him `Attack Now`. `texas_offer`,
 `Monitor`/`Need Texas Signal` player into `Strong Texas Angle`. `do_not_pursue`
 hides the player from the Texas board. `staff_notes` show in the dashboard hover
 profile.
+
+## Flip snapshot model (weekly board)
+
+`train_flip_model.py` scores a commitment once, on the day it's made. `train_flip_snapshot_model.py`
+scores every active commitment every two weeks, using everything known by that date (visits and
+offers since committing, other decommits from the school, class crowding), and predicts a decommit
+or flip within the next 60 days — the question a weekly flip board asks.
+
+```bash
+.venv/bin/python train_flip_snapshot_model.py
+```
+
+Each test class is scored by models trained only on earlier classes. Results are in
+`data/flip_snapshot_summary.md`; the live board is `data/flip_boards/live_flip_risk.csv`.
