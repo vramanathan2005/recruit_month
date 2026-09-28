@@ -253,7 +253,15 @@ or flip within the next 60 days — the question a weekly flip board asks.
 ```
 
 Each test class is scored by models trained only on earlier classes. Results are in
-`data/flip_snapshot_summary.md`; the live board is `data/flip_boards/live_flip_risk.csv`.
+`data/flip_snapshot_summary.md`; the live board is `data/flip_boards/live_flip_risk.csv`, sorted by:
+
+- `break_before_signing`: chance the commitment breaks before the signing period ends (trained on
+  complete classes only)
+- `break_probability_60d`: chance it breaks in the next 60 days
+
+Both are recalibrated by stage of the cycle, and each is the median of the full-data model and 6 models
+trained on resampled commitments, with the 10th-90th percentile as `*_low`/`*_high` — wide when a
+player's situation is rare in the history.
 
 ### Refreshing the data
 

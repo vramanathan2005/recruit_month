@@ -260,6 +260,15 @@ def snapshot_rows(commitments: list[dict], cutoff: date, labeled_only: bool) -> 
                 label = 1
             elif day + timedelta(days=HORIZON_DAYS) <= cutoff:
                 label = 0
+            # Before signing: does it break at any point before the signing period ends? Known once it has
+            # broken, or once the commitment's at-risk window has closed.
+            breaks_in_window = c["broke_on"] is not None and c["broke_on"] == c["end"]
+            if breaks_in_window and c["broke_on"] > day:
+                label_before_signing = 1
+            elif not breaks_in_window and c["end"] <= cutoff:
+                label_before_signing = 0
+            else:
+                label_before_signing = None
             rows.append({
                 "class_year": class_year,
                 "player_id": c["key"][1],
@@ -269,6 +278,7 @@ def snapshot_rows(commitments: list[dict], cutoff: date, labeled_only: bool) -> 
                 "snapshot_date": day.isoformat(),
                 "profile_url": recruit.get("profile_url", ""),
                 "target": label,
+                "target_before_signing": label_before_signing,
                 "rating": my_rating,
                 "prior_commitments_at_commit": before["Commitment"],
                 "prior_decommits_at_commit": before["Decommit"],
@@ -294,6 +304,7 @@ def snapshot_rows(commitments: list[dict], cutoff: date, labeled_only: bool) -> 
                 "class_commits_now": sum(1 for p in classes[(class_year, school_norm)] if p[2] != c["key"][1] and p[0] <= day < p[1]),
                 "nearest_visited_elsewhere_miles": nearest_visited,
                 "visited_school_miles_closer": (committed_miles - nearest_visited) if nearest_visited is not None and isinstance(committed_miles, (int, float)) else None,
+                "most_visits_to_one_other_school": max((sum(1 for _, s in visits_elsewhere if s == school) for school in {s for _, s in visits_elsewhere}), default=0),
                 "visited_home_state_school": int(any(str(g.get("is_in_state_commit")) == "yes" for g in visited_geo) and str(geo.get("is_in_state_commit")) != "yes"),
                 "school_decommits_last_60_days": len(recent),
                 "school_class_decommits_last_60_days": sum(1 for b in recent if b[1] == class_year),
@@ -406,6 +417,68 @@ def fit_calibrator(probability: pd.Series, days_to_signing: pd.Series, target: p
     return LogisticRegression(max_iter=2000).fit(calibration_design(probability, days_to_signing), target)
 
 
+BOOTSTRAP_MODELS = 6
+
+
+def bootstrap_range(train: pd.DataFrame, target: str, live: pd.DataFrame, calibrator, full_model_prediction: pd.Series,
+                    seed: int = 11) -> tuple[pd.Series, pd.Series, pd.Series]:
+    """The median and 10th-90th percentile of calibrated predictions from the full-data model plus models
+    trained on resampled commitments: the board's number, and how much it depends on which past
+    commitments the model happened to learn from (wide for rare cases)."""
+    rng = np.random.default_rng(seed)
+    keys = train[["class_year", "player_id", "commitment_date"]].astype(str).agg("|".join, axis=1)
+    codes, uniques = pd.factorize(keys)
+    predictions = []
+    for _ in range(BOOTSTRAP_MODELS):
+        # Resample commitments as weights (how many times each was drawn), not duplicated rows: the model's
+        # internal calibration splits rows into folds, and a duplicated commitment in two folds leaks.
+        counts = np.bincount(rng.integers(0, len(uniques), size=len(uniques)), minlength=len(uniques))
+        weight = counts[codes]
+        sample = train[weight > 0]
+        model = boosted_model()
+        model.fit(sample[FEATURES], sample[target], model__sample_weight=weight[weight > 0])
+        raw = pd.Series(model.predict_proba(live[FEATURES])[:, 1], index=live.index)
+        predictions.append(calibrator.predict_proba(calibration_design(raw, live["days_to_signing"]))[:, 1])
+    stacked = np.vstack(predictions + [full_model_prediction.to_numpy()])
+    return (pd.Series(np.median(stacked, axis=0), index=live.index), pd.Series(np.percentile(stacked, 10, axis=0), index=live.index),
+            pd.Series(np.percentile(stacked, 90, axis=0), index=live.index))
+
+
+def before_signing_model(all_rows: pd.DataFrame, live: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series, object]:
+    """Chance a commitment breaks before the signing period ends — the question a staff asks — trained only
+    on classes whose signing period is over (a live class only shows the commitments that already broke)."""
+    frame = all_rows[all_rows["target_before_signing"].notna() & (all_rows["class_year"] <= max(CALIBRATION_CLASSES))].copy()
+    frame["target_before_signing"] = frame["target_before_signing"].astype(int)
+    rows = []
+    for year in CALIBRATION_CLASSES:
+        train, test_index = frame[frame["class_year"] < year], frame.index[frame["class_year"] == year]
+        model = boosted_model()
+        model.fit(train[FEATURES], train["target_before_signing"])
+        frame.loc[test_index, "before_signing_oos"] = model.predict_proba(frame.loc[test_index, FEATURES])[:, 1]
+    for fit_year, check_year in [(2025, 2026), (2026, 2025)]:
+        fit, check = frame[frame["class_year"] == fit_year], frame[frame["class_year"] == check_year].copy()
+        cal = fit_calibrator(fit["before_signing_oos"], fit["days_to_signing"], fit["target_before_signing"])
+        check["calibrated"] = cal.predict_proba(calibration_design(check["before_signing_oos"], check["days_to_signing"]))[:, 1]
+        check["stage"] = stage(check["days_to_signing"])
+        board = check.assign(target=check["target_before_signing"])
+        rows.append({"checked_on": check_year, "stage": "all", "snapshots": len(check),
+                     "auc": round(float(roc_auc_score(check["target_before_signing"], check["before_signing_oos"])), 4),
+                     "calibrated": round(float(check["calibrated"].mean()), 4), "actual": round(float(check["target_before_signing"].mean()), 4),
+                     **{f"top_{BOARD_SIZE}_hit_rate": board_backtest(board, "calibrated")["top_25_hit_rate"]}})
+        for name, group in check.groupby("stage", sort=False):
+            rows.append({"checked_on": check_year, "stage": name, "snapshots": len(group),
+                         "auc": round(float(roc_auc_score(group["target_before_signing"], group["before_signing_oos"])), 4) if group["target_before_signing"].nunique() > 1 else None,
+                         "calibrated": round(float(group["calibrated"].mean()), 4), "actual": round(float(group["target_before_signing"].mean()), 4)})
+    held_out = frame[frame["class_year"].isin(CALIBRATION_CLASSES)]
+    calibrator = fit_calibrator(held_out["before_signing_oos"], held_out["days_to_signing"], held_out["target_before_signing"])
+    final = boosted_model()
+    final.fit(frame[FEATURES], frame["target_before_signing"])
+    raw = pd.Series(final.predict_proba(live[FEATURES])[:, 1], index=live.index)
+    full = pd.Series(calibrator.predict_proba(calibration_design(raw, live["days_to_signing"]))[:, 1], index=live.index)
+    probability, live["before_signing_low"], live["before_signing_high"] = bootstrap_range(frame, "target_before_signing", live, calibrator, full)
+    return pd.DataFrame(rows), probability, calibrator
+
+
 def reasons(row: pd.Series) -> str:
     out = []
     if row["official_visits_elsewhere"]:
@@ -418,6 +491,8 @@ def reasons(row: pd.Series) -> str:
         out.append(f"{int(row['power_offers_since_commit'])} power offer(s) since committing")
     if row["higher_rated_same_position_now"] >= 2:
         out.append(f"{int(row['higher_rated_same_position_now'])} higher-rated commits at his position")
+    if row["most_visits_to_one_other_school"] >= 2:
+        out.append(f"{int(row['most_visits_to_one_other_school'])} visits to the same other school")
     if row["visited_home_state_school"]:
         out.append("visited a home-state school")
     elif pd.notna(row["visited_school_miles_closer"]) and row["visited_school_miles_closer"] >= 150:
@@ -538,11 +613,20 @@ def main() -> int:
     live = live[pd.to_datetime(live["snapshot_date"]).dt.date > cutoff - timedelta(days=GRID_DAYS)]
     live = live[live.apply(lambda r: date.fromisoformat(r["snapshot_date"]) < high_school_cycle_cutoff(int(r["class_year"])), axis=1)]
     live["model_raw_probability"] = final.predict_proba(live[FEATURES])[:, 1].round(4)
-    live["break_probability_60d"] = calibrator.predict_proba(calibration_design(live["model_raw_probability"], live["days_to_signing"]))[:, 1].round(4) if best == "boosted" else live["model_raw_probability"]
+    full = pd.Series(calibrator.predict_proba(calibration_design(live["model_raw_probability"], live["days_to_signing"]))[:, 1], index=live.index)
+    middle, low, high = bootstrap_range(frame, "target", live, calibrator, full)
+    live["break_probability_60d"], live["break_60d_low"], live["break_60d_high"] = middle.round(4), low.round(4), high.round(4)
+    print("scoring before-signing risk")
+    all_rows = numeric_features(pd.DataFrame(snapshot_rows(commitments, cutoff, labeled_only=False)))
+    before_df, before_probability, _ = before_signing_model(all_rows, live)
+    before_df.to_csv(args.out_dir / "flip_snapshot_before_signing_validation.csv", index=False)
+    live["break_before_signing"] = before_probability.round(4)
+    live["before_signing_low"], live["before_signing_high"] = live["before_signing_low"].round(4), live["before_signing_high"].round(4)
     live["why"] = live.apply(reasons, axis=1)
-    live = live.sort_values("break_probability_60d", ascending=False)
+    live = live.sort_values("break_before_signing", ascending=False)
     columns = ["class_year", "name", "position", "star_bucket", "committed_school", "commitment_date", "snapshot_date",
-               "break_probability_60d", "why", "visited_schools", "web_report_events", "official_visits_elsewhere", "unofficial_visits_elsewhere",
+               "break_before_signing", "before_signing_low", "before_signing_high",
+               "break_probability_60d", "break_60d_low", "break_60d_high", "why", "visited_schools", "web_report_events", "official_visits_elsewhere", "unofficial_visits_elsewhere",
                "power_offers_since_commit", "days_committed", "days_to_signing", "model_raw_probability", "rating", "player_id", "profile_url"]
     (args.out_dir / "flip_boards").mkdir(parents=True, exist_ok=True)
     live[columns].to_csv(args.out_dir / "flip_boards" / "live_flip_risk.csv", index=False)
@@ -558,6 +642,9 @@ def main() -> int:
         "## Recalibration by stage of the cycle (fit on one class, checked on the other)", "",
         "The live board's `break_probability_60d` is the raw score recalibrated this way, fit on both classes.", "",
         markdown(stage_df), "",
+        "## Before signing: breaks at any point before the signing period ends", "",
+        f"Trained on complete classes only; each checked on a model trained on earlier classes and recalibrated on the other. The live board's `break_before_signing` uses all of them. Ranges (`*_low`/`*_high`) are the 10th-90th percentile of {BOOTSTRAP_MODELS} models trained on resampled commitments.", "",
+        markdown(before_df), "",
     ]
     (args.out_dir / "flip_snapshot_summary.md").write_text("\n".join(summary) + "\n", encoding="utf-8")
     print("\n".join(summary))

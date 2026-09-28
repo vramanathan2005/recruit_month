@@ -82,3 +82,24 @@ The live board's `break_probability_60d` is the raw score recalibrated this way,
 | 2026 | 2025 | 0-30 days out | 5288 | 0.0876 | 0.1268 | 0.105 |
 | 2026 | 2025 | after early signing day | 3119 | 0.0199 | 0.0479 | 0.0792 |
 
+## Before signing: breaks at any point before the signing period ends
+
+Trained on complete classes only; each checked on a model trained on earlier classes and recalibrated on the other. The live board's `break_before_signing` uses all of them. Ranges (`*_low`/`*_high`) are the 10th-90th percentile of 6 models trained on resampled commitments.
+
+| checked_on | stage | snapshots | auc | calibrated | actual | top_25_hit_rate |
+| --- | --- | --- | --- | --- | --- | --- |
+| 2026 | all | 38325 | 0.6953 | 0.2309 | 0.2395 | 0.558 |
+| 2026 | 90-180 days out | 12350 | 0.6183 | 0.2287 | 0.2504 |  |
+| 2026 | 60-90 days out | 4375 | 0.6275 | 0.2181 | 0.2347 |  |
+| 2026 | 30-60 days out | 4433 | 0.6515 | 0.2041 | 0.2093 |  |
+| 2026 | 0-30 days out | 7036 | 0.6835 | 0.1132 | 0.1308 |  |
+| 2026 | 180+ days out | 7772 | 0.6745 | 0.3993 | 0.3865 |  |
+| 2026 | after early signing day | 2359 | 0.8488 | 0.1134 | 0.0877 |  |
+| 2025 | all | 38734 | 0.7261 | 0.2126 | 0.2043 | 0.5379 |
+| 2025 | 180+ days out | 6805 | 0.7289 | 0.3604 | 0.3669 |  |
+| 2025 | 90-180 days out | 11527 | 0.6666 | 0.2389 | 0.2167 |  |
+| 2025 | 60-90 days out | 4348 | 0.672 | 0.2212 | 0.204 |  |
+| 2025 | 30-60 days out | 4487 | 0.6735 | 0.1971 | 0.1917 |  |
+| 2025 | 0-30 days out | 7192 | 0.6739 | 0.1332 | 0.1146 |  |
+| 2025 | after early signing day | 4375 | 0.7883 | 0.051 | 0.0795 |  |
+
