@@ -1,0 +1,251 @@
+season,kind,school,school_key,outgoing_coach,date,reason,replacement
+2020,in-season,Southern Miss,southern miss,Jay Hopson,2020-09-07,Resigned,Scotty Walden (Interim)
+2020,in-season,Utah State,utah state,Gary Andersen,2020-11-07,Resigned,Frank Maile (Interim)
+2020,in-season,South Carolina,south carolina,Will Muschamp,2020-11-15,Fired,Mike Bobo (Interim)
+2020,in-season,Vanderbilt,vanderbilt,Derek Mason,2020-11-29,Fired,Todd Fitch (Interim)
+2020,in-season,Illinois,illinois,Lovie Smith,2020-12-13,Fired,Rod Smith (Interim)
+2020,in-season,Auburn,auburn,Gus Malzahn,2020-12-13,Fired,Kevin Steele (Interim)
+2020,in-season,Southern Miss,southern miss,Tim Billings (Interim),2020-12-02,Permanent replacement,Will Hall
+2020,in-season,South Carolina,south carolina,Mike Bobo (Interim),2020-12-06,Permanent replacement,Shane Beamer
+2020,in-season,South Alabama,south alabama,Steve Campbell,2020-12-06,Fired,Kane Wommack
+2020,in-season,Louisiana–Monroe,ul monroe,Matt Viator,2020-12-07,Fired,Terry Bowden
+2020,in-season,Utah State,utah state,Frank Maile (Interim),2020-12-10,Permanent replacement,Blake Anderson
+2020,in-season,Arkansas State,arkansas state,Blake Anderson,2020-12-10,Hired by Utah State,Butch Jones
+2020,in-season,Arizona,arizona,Kevin Sumlin,2020-12-12,Fired,Jedd Fisch
+2020,in-season,Vanderbilt,vanderbilt,Todd Fitch (Interim),2020-12-14,Permanent replacement,Clark Lea
+2020,in-season,Illinois,illinois,Rod Smith (Interim),2020-12-19,Permanent replacement,Bret Bielema
+2020,in-season,Auburn,auburn,Kevin Steele (Interim),2020-12-22,Permanent replacement,Bryan Harsin
+2020,in-season,Boise State,boise state,Bryan Harsin,2020-12-22,Hired by Auburn,Andy Avalos
+2020,in-season,Texas,texas,Tom Herman,2021-01-02,Fired,Steve Sarkisian
+2020,in-season,Marshall,marshall,Doc Holliday,2021-01-04,Contract not renewed,Charles Huff
+2020,in-season,Tennessee,tennessee,Jeremy Pruitt,2021-01-18,Fired,Josh Heupel
+2020,in-season,UCF,ucf,Josh Heupel,2021-01-27,Hired by Tennessee,Gus Malzahn
+2020,in-season,Kansas,kansas,Les Miles,2021-03-08,Mutually agreed to part ways,Lance Leipold
+2020,in-season,Buffalo,buffalo,Lance Leipold,2021-04-30,Hired by Kansas,Maurice Linguist
+2021,in-season,Ohio,ohio,Frank Solich,2021-07-14,Retired,Tim Albin (promoted on July 14)
+2021,in-season,UConn,connecticut,Randy Edsall,2021-09-06,Resigned,Lou Spanos (interim)
+2021,in-season,USC,usc,Clay Helton,2021-09-13,Fired,Donte Williams (interim)
+2021,in-season,Georgia Southern,georgia southern,Chad Lunsford,2021-09-26,Fired,Kevin Whitley (interim)
+2021,in-season,Washington State,washington state,Nick Rolovich,2021-10-18,Fired,Jake Dickert (named full time on November 27)
+2021,in-season,Texas Tech,texas tech,Matt Wells,2021-10-25,Fired,Sonny Cumbie (interim)
+2021,in-season,TCU,tcu,Gary Patterson,2021-10-31,Parted ways,Jerry Kill (interim)
+2021,in-season,Akron,akron,Tom Arth,2021-11-04,Fired,Oscar Rodriguez (interim)
+2021,in-season,UMass,massachusetts,Walt Bell,2021-11-07,Fired,Alex Miller (interim)
+2021,in-season,Washington,washington,Jimmy Lake,2021-11-14,Fired,Bob Gregory (interim)
+2021,in-season,Virginia Tech,virginia tech,Justin Fuente,2021-11-16,Parted ways,J. C. Price (interim)
+2021,in-season,Florida,florida,Dan Mullen,2021-11-21,Fired,Greg Knox (interim)
+2021,in-season,Troy,troy,Chip Lindsey,2021-11-21,Fired,Brandon Hall (interim)
+2021,in-season,SMU,smu,Sonny Dykes,2021-11-26,Hired by TCU,Jim Leavitt (interim)
+2021,in-season,Oklahoma,oklahoma,Lincoln Riley,2021-11-28,Hired by USC,Bob Stoops (interim; bowl)
+2021,in-season,LSU,lsu,Ed Orgeron,2021-11-28,Parted ways,Brad Davis (interim; bowl)
+2021,in-season,Notre Dame,notre dame,Brian Kelly,2021-11-29,Hired by LSU,Marcus Freeman (promoted on December 3)
+2021,in-season,Fresno State,fresno state,Kalen DeBoer,2021-11-29,Hired by Washington,Lee Marks (interim; bowl)
+2021,in-season,Louisiana,louisiana,Billy Napier,2021-12-05,Hired by Florida,Michael Desormeaux (promoted on December 5)
+2021,in-season,Nevada,nevada,Jay Norvell,2021-12-06,Hired by Colorado State,Vai Taua (interim; bowl)
+2021,in-season,Oregon,oregon,Mario Cristobal,2021-12-06,Hired by Miami (FL),"Bryan McClendon (interim, bowl)"
+2021,in-season,Miami (FL),miami,Manny Diaz,2021-12-06,Fired,Jess Simpson (interim; bowl)
+2021,off-season,Georgia Southern,georgia southern,Kevin Whitley (interim),2021-11-02,Permanent replacement,Clay Helton
+2021,off-season,Texas Tech,texas tech,Sonny Cumbie (interim),2021-11-08,Permanent replacement,Joey McGuire
+2021,off-season,FIU,fiu,Butch Davis,2021-11-10,Will not return after the 2021 season,Mike MacIntyre
+2021,off-season,UConn,connecticut,Lou Spanos (interim),2021-11-11,Permanent replacement,Jim Mora
+2021,off-season,UMass,massachusetts,Alex Miller (interim),2021-11-21,Permanent replacement,Don Brown
+2021,off-season,Louisiana Tech,louisiana tech,Skip Holtz,2021-11-26,Fired,Sonny Cumbie
+2021,off-season,TCU,tcu,Jerry Kill (interim),2021-11-26,Permanent replacement,Sonny Dykes
+2021,off-season,New Mexico State,new mexico state,Doug Martin,2021-11-27,Fired,Jerry Kill
+2021,off-season,Duke,duke,David Cutcliffe,2021-11-28,Parted ways,Mike Elko
+2021,off-season,Florida,florida,Greg Knox (interim),2021-11-28,Permanent replacement,Billy Napier
+2021,off-season,USC,usc,Donte Williams (interim),2021-11-28,Permanent replacement,Lincoln Riley
+2021,off-season,SMU,smu,Jim Leavitt (interim),2021-11-29,Permanent replacement,Rhett Lashlee
+2021,off-season,Temple,temple,Rod Carey,2021-11-29,Fired,Stan Drayton
+2021,off-season,LSU,lsu,Brad Davis (interim),2021-11-29,Permanent replacement,Brian Kelly
+2021,off-season,Washington,washington,Bob Gregory (interim),2021-11-29,Permanent replacement,Kalen DeBoer
+2021,off-season,Virginia Tech,virginia tech,J. C. Price (interim),2021-11-30,Permanent replacement,Brent Pry
+2021,off-season,Colorado State,colorado state,Steve Addazio,2021-12-02,Fired,Jay Norvell
+2021,off-season,Virginia,virginia,Bronco Mendenhall,2021-12-02,Resigned,Tony Elliott
+2021,off-season,Troy,troy,Brandon Hall (interim),2021-12-02,Permanent replacement,Jon Sumrall
+2021,off-season,Akron,akron,Oscar Rodriguez (interim),2021-12-04,Permanent replacement,Joe Moorhead
+2021,off-season,Oklahoma,oklahoma,Bob Stoops (interim; bowl),2021-12-05,Permanent replacement,Brent Venables
+2021,off-season,Miami (FL),miami,Jess Simpson (interim; bowl),2021-12-06,Permanent replacement,Mario Cristobal
+2021,off-season,Fresno State,fresno state,Lee Marks (interim; bowl),2021-12-08,Permanent replacement,Jeff Tedford
+2021,off-season,Nevada,nevada,Vai Taua (interim; bowl),2021-12-10,Permanent replacement,Ken Wilson
+2021,off-season,Oregon,oregon,Bryan McClendon (interim; bowl),2021-12-11,Permanent replacement,Dan Lanning
+2021,off-season,Hawaiʻi,hawaii,Todd Graham,2022-01-14,Resigned,Timmy Chang
+2022,in-season,UAB,uab,Bill Clark,2022-06-24,Retired (effective August 1),"Bryant Vincent (interim, bowl)"
+2022,in-season,Nebraska,nebraska,Scott Frost,2022-09-11,Fired,Mickey Joseph (interim)
+2022,in-season,Arizona State,arizona state,Herm Edwards,2022-09-18,Fired,Shaun Aguano (interim)
+2022,in-season,Georgia Tech,georgia tech,Geoff Collins,2022-09-25,Fired,Brent Key (named on November 30)
+2022,in-season,Colorado,colorado,Karl Dorrell,2022-10-02,Fired,Mike Sanford Jr. (interim)
+2022,in-season,Wisconsin,wisconsin,Paul Chryst,2022-10-02,Fired,"Jim Leonhard (interim, bowl)"
+2022,in-season,Charlotte,charlotte,Will Healy,2022-10-23,Fired,Peter Rossomando (interim)
+2022,in-season,Auburn,auburn,Bryan Harsin,2022-10-31,Fired,Cadillac Williams (interim)
+2022,in-season,South Florida,usf,Jeff Scott,2022-11-06,Fired,Daniel Da Prato (interim)
+2022,in-season,Cincinnati,cincinnati,Luke Fickell,2022-11-27,Hired as head coach by Wisconsin,"Kerry Coombs (interim, bowl)"
+2022,in-season,Liberty,liberty,Hugh Freeze,2022-11-28,Hired as head coach by Auburn,"Josh Aldridge (interim, bowl)"
+2022,in-season,Coastal Carolina,coastal carolina,Jamey Chadwell,2022-12-04,Hired as head coach by Liberty,"Chad Staggs (interim, bowl)"
+2022,in-season,North Texas,north texas,Seth Littrell,2022-12-04,Fired,"Phil Bennett (interim, bowl)"
+2022,in-season,Louisville,louisville,Scott Satterfield,2022-12-05,Hired as head coach by Cincinnati,"Deion Branch (interim, bowl)"
+2022,in-season,Purdue,purdue,Jeff Brohm,2022-12-07,Hired as head coach by Louisville,"Brian Brohm (interim, bowl)"
+2022,in-season,Mississippi State,mississippi state,Mike Leach,2022-12-12,Died,Zach Arnett (named on December 14)
+2022,off-season,Charlotte,charlotte,Peter Rossomando (interim),2022-11-15,Permanent replacement,Biff Poggi
+2022,off-season,Nebraska,nebraska,Mickey Joseph (interim),2022-11-25,Permanent replacement,Matt Rhule
+2022,off-season,Arizona State,arizona state,Shaun Aguano (interim),2022-11-26,Permanent replacement,Kenny Dillingham
+2022,off-season,Florida Atlantic,florida atlantic,Willie Taggart,2022-11-26,Fired,Tom Herman
+2022,off-season,Stanford,stanford,David Shaw,2022-11-27,Resigned,Troy Taylor
+2022,off-season,Wisconsin,wisconsin,Jim Leonhard (interim),2022-11-27,Permanent replacement,Luke Fickell
+2022,off-season,Tulsa,tulsa,Philip Montgomery,2022-11-27,Fired,Kevin Wilson
+2022,off-season,Texas State,texas state,Jake Spavital,2022-11-27,Fired,G. J. Kinne
+2022,off-season,Western Michigan,western michigan,Tim Lester,2022-11-28,Fired,Lance Taylor
+2022,off-season,UNLV,unlv,Marcus Arroyo,2022-11-28,Fired,Barry Odom
+2022,off-season,Auburn,auburn,Cadillac Williams (interim),2022-11-28,Permanent replacement,Hugh Freeze
+2022,off-season,UAB,uab,Bryant Vincent (interim),2022-11-30,Permanent replacement,Trent Dilfer
+2022,off-season,Colorado,colorado,Mike Sanford Jr. (interim),2022-12-03,Permanent replacement,Deion Sanders
+2022,off-season,South Florida,usf,Daniel Da Prato (interim),2022-12-03,Permanent replacement,Alex Golesh
+2022,off-season,Liberty,liberty,"Josh Aldridge (interim, bowl)",2022-12-04,Permanent replacement,Jamey Chadwell
+2022,off-season,Coastal Carolina,coastal carolina,"Chad Staggs (interim, bowl)",2022-12-04,Permanent replacement,Tim Beck
+2022,off-season,Cincinnati,cincinnati,"Kerry Coombs (interim, bowl)",2022-12-05,Permanent replacement,Scott Satterfield
+2022,off-season,Kent State,kent state,Sean Lewis,2022-12-05,Hired as offensive coordinator by Colorado,Kenni Burns
+2022,off-season,Louisville,louisville,"Deion Branch (interim, bowl)",2022-12-07,Permanent replacement,Jeff Brohm
+2022,off-season,Navy,navy,Ken Niumatalolo,2022-12-11,Fired,Brian Newberry
+2022,off-season,Purdue,purdue,"Brian Brohm (interim, bowl)",2022-12-13,Permanent replacement,Ryan Walters
+2022,off-season,North Texas,north texas,"Phil Bennett (interim, bowl)",2022-12-13,Permanent replacement,Eric Morris
+2023,in-season,Northwestern,northwestern,Pat Fitzgerald,2023-07-10,Fired,David Braun (named full-time on November 15)
+2023,in-season,Michigan State,michigan state,Mel Tucker,2023-09-27,Fired,Harlon Barnett (interim)
+2023,in-season,Texas A&M,texas a&m,Jimbo Fisher,2023-11-12,Fired,Elijah Robinson (interim)
+2023,in-season,Boise State,boise state,Andy Avalos,2023-11-12,Fired,Spencer Danielson (named full-time on December 3)
+2023,in-season,Mississippi State,mississippi state,Zach Arnett,2023-11-13,Fired,Greg Knox (interim)
+2023,in-season,Syracuse,syracuse,Dino Babers,2023-11-19,Fired,Nunzio Campanile (interim)
+2023,in-season,Oregon State,oregon state,Jonathan Smith,2023-11-25,Hired by Michigan State,"Kefense Hynson (interim, bowl)"
+2023,in-season,Duke,duke,Mike Elko,2023-11-27,Hired by Texas A&M,"Trooper Taylor (interim, bowl)"
+2023,in-season,James Madison,james madison,Curt Cignetti,2023-11-30,Hired by Indiana,"Damian Wroblewski (interim, bowl)"
+2023,in-season,Tulane,tulane,Willie Fritz,2023-12-03,Hired by Houston,"Slade Nagle (interim, bowl)"
+2023,in-season,Troy,troy,Jon Sumrall,2023-12-08,Hired by Tulane,"Greg Gasparato (interim, bowl)"
+2023,off-season,San Diego State,san diego state,Brady Hoke,2023-11-13,Retired (effective at end of season),Sean Lewis
+2023,off-season,Michigan State,michigan state,Harlon Barnett (interim),2023-11-25,Hired as Defensive Backs Coach by Northwestern,Jonathan Smith
+2023,off-season,New Mexico,new mexico,Danny Gonzales,2023-11-25,Fired,Bronco Mendenhall
+2023,off-season,Indiana,indiana,Tom Allen,2023-11-26,Hired As Defensive Coordinator/Linebackers Coach by Penn State,Curt Cignetti
+2023,off-season,Houston,houston,Dana Holgorsen,2023-11-26,Fired,Willie Fritz
+2023,off-season,UTEP,utep,Dana Dimel,2023-11-26,Fired,Scotty Walden
+2023,off-season,Louisiana–Monroe,ul monroe,Terry Bowden,2023-11-26,Fired,Bryant Vincent
+2023,off-season,Mississippi State,mississippi state,Greg Knox (interim),2023-11-26,Permanent replacement,Jeff Lebby
+2023,off-season,Texas A&M,texas a&m,Elijah Robinson (interim),2023-11-27,Hired as Defensive Coordinator By Syracuse,Mike Elko
+2023,off-season,Middle Tennessee,middle tennessee,Rick Stockstill,2023-11-27,Fired,Derek Mason
+2023,off-season,Syracuse,syracuse,Nunzio Campanile (interim),2023-11-28,Permanent replacement,Fran Brown
+2023,off-season,Oregon State,oregon state,Kefense Hynson (interim),2023-11-28,Permanent replacement,Trent Bray
+2023,off-season,Nevada,nevada,Ken Wilson,2023-12-01,Fired,Jeff Choate
+2023,off-season,Wyoming,wyoming,Craig Bohl,2023-12-06,Retired (effective at end of season),Jay Sawvel
+2023,off-season,James Madison,james madison,Damian Wroblewski (interim),2023-12-07,Hired as Assistant Offensive Line Coach by Maryland,Bob Chesney
+2023,off-season,Duke,duke,Trooper Taylor (interim),2023-12-07,Hired as Associate Head Coach/Running Backs Coach by Texas A&M,Manny Diaz
+2023,off-season,Tulane,tulane,Slade Nagle (interim),2023-12-08,Hired as Special teams/Tight Ends Coach by LSU,Jon Sumrall
+2023,off-season,Troy,troy,Greg Gasparato (interim),2023-12-18,Hired as Defensive Coordinator by Tulane,Gerad Parker
+2023,off-season,New Mexico State,new mexico state,Jerry Kill,2023-12-23,Hired as Consultant by Vanderbilt,Tony Sanchez
+2023,off-season,Alabama,alabama,Nick Saban,2024-01-10,Retired,Kalen DeBoer
+2023,off-season,Washington,washington,Kalen DeBoer,2024-01-12,Hired by Alabama,Jedd Fisch
+2023,off-season,Arizona,arizona,Jedd Fisch,2024-01-14,Hired by Washington,Brent Brennan
+2023,off-season,South Alabama,south alabama,Kane Wommack,2024-01-15,Hired as co-defensive coordinator by Alabama,Major Applewhite
+2023,off-season,San Jose State,san jose state,Brent Brennan,2024-01-16,Hired by Arizona,Ken Niumatalolo
+2023,off-season,Buffalo,buffalo,Maurice Linguist,2024-01-16,Hired as co-defensive coordinator by Alabama,Pete Lembo
+2023,off-season,Michigan,michigan,Jim Harbaugh,2024-01-24,Hired by Los Angeles Chargers,Sherrone Moore
+2023,off-season,Boston College,boston college,Jeff Hafley,2024-01-31,Hired as defensive coordinator by Green Bay Packers,Bill O'Brien
+2023,off-season,UCLA,ucla,Chip Kelly,2024-02-09,Hired as offensive coordinator by Ohio State,DeShaun Foster
+2023,off-season,Georgia State,georgia state,Shawn Elliott,2024-02-15,Hired as tight ends coach by South Carolina,Dell McGee
+2024,in-season,Fresno State,fresno state,Jeff Tedford,2024-07-15,Resigned,Tim Skipper (interim)
+2024,in-season,Utah State,utah state,Blake Anderson,2024-07-18,Fired,Nate Dreiling (interim)
+2024,in-season,East Carolina,east carolina,Mike Houston,2024-10-20,Fired,Blake Harrell (initially interim; named permanent on November 25)
+2024,in-season,Southern Miss,southern miss,Will Hall,2024-10-20,Fired,Reed Stringer (interim)
+2024,in-season,Rice,rice,Mike Bloomgren,2024-10-27,Fired,Pete Alamar (interim)
+2024,in-season,Kennesaw State,kennesaw state,Brian Bohannon,2024-11-10,Fired,Chandler Burks (interim)
+2024,in-season,Ball State,ball state,Mike Neu,2024-11-16,Fired,Colin Johnson (interim)
+2024,in-season,Temple,temple,Stan Drayton,2024-11-17,Fired,Everett Withers (interim)
+2024,in-season,UMass,massachusetts,Don Brown,2024-11-18,Fired,Shane Montgomery (interim)
+2024,in-season,Florida Atlantic,florida atlantic,Tom Herman,2024-11-18,Fired,Chad Lunsford (interim)
+2024,in-season,Charlotte,charlotte,Biff Poggi,2024-11-18,Fired,Tim Brewster (interim)
+2024,in-season,Tulsa,tulsa,Kevin Wilson,2024-11-24,Fired,Ryan Switzer (interim)
+2024,in-season,North Carolina,north carolina,Mack Brown,2024-11-26,Fired,"Freddie Kitchens (interim, bowl)"
+2024,in-season,West Virginia,west virginia,Neal Brown,2024-12-01,Fired,"Chad Scott (interim, bowl)"
+2024,in-season,Sam Houston,sam houston,K. C. Keeler,2024-12-01,Hired by Temple,"Brad Cornelsen (interim, bowl)"
+2024,in-season,Ohio,ohio,Tim Albin,2024-12-07,Hired by Charlotte,Brian Smith (initially interim; named permanent on December 18)
+2024,in-season,Marshall,marshall,Charles Huff,2024-12-08,Hired by Southern Miss,"Telly Lockette (interim, bowl)"
+2024,in-season,UNLV,unlv,Barry Odom,2024-12-08,Hired by Purdue,"Del Alexander (interim, bowl)"
+2024,in-season,Jacksonville State,jacksonville state,Rich Rodriguez,2024-12-12,Hired by West Virginia,"Rod Smith (interim, bowl)"
+2024,in-season,Washington State,washington state,Jake Dickert,2024-12-18,Hired by Wake Forest,"Pete Kaligis (interim, bowl)"
+2024,off-season,Central Michigan,central michigan,Jim McElwain,2024-11-20,Retired,Matt Drinkall
+2024,off-season,Rice,rice,Pete Alamar (interim),2024-11-26,Permanent replacement,Scott Abell
+2024,off-season,UCF,ucf,Gus Malzahn,2024-11-30,Hired as offensive coordinator by Florida State,Scott Frost
+2024,off-season,Purdue,purdue,Ryan Walters,2024-12-01,Fired,Barry Odom
+2024,off-season,FIU,fiu,Mike MacIntyre,2024-12-01,Fired,Willie Simmons
+2024,off-season,Kennesaw State,kennesaw state,Chandler Burks (interim),2024-12-01,Permanent replacement,Jerry Mack
+2024,off-season,Temple,temple,Everett Withers (interim),2024-12-01,Permanent replacement,K. C. Keeler
+2024,off-season,Appalachian State,appalachian state,Shawn Clark,2024-12-02,Fired,Dowell Loggains
+2024,off-season,Florida Atlantic,florida atlantic,Chad Lunsford (interim),2024-12-02,Permanent replacement,Zach Kittley
+2024,off-season,Ball State,ball state,Colin Johnson (interim),2024-12-04,Permanent replacement,Mike Uremovich
+2024,off-season,UMass,massachusetts,Shane Montgomery (interim),2024-12-04,Permanent replacement,Joe Harasymiak
+2024,off-season,Fresno State,fresno state,Tim Skipper (interim),2024-12-04,Permanent replacement,Matt Entz
+2024,off-season,Utah State,utah state,Nate Dreiling (interim),2024-12-06,Permanent replacement,Bronco Mendenhall
+2024,off-season,New Mexico,new mexico,Bronco Mendenhall,2024-12-06,Hired by Utah State,Jason Eck
+2024,off-season,Charlotte,charlotte,Tim Brewster (interim),2024-12-07,Permanent replacement,Tim Albin
+2024,off-season,Southern Miss,southern miss,Reed Stringer (interim),2024-12-08,Permanent replacement,Charles Huff
+2024,off-season,Marshall,marshall,Telly Lockette (interim/bowl),2024-12-08,Permanent replacement,Tony Gibson
+2024,off-season,Tulsa,tulsa,Ryan Switzer (interim),2024-12-08,Permanent replacement,Tre Lamb
+2024,off-season,North Carolina,north carolina,Freddie Kitchens (interim/bowl),2024-12-11,Permanent replacement,Bill Belichick
+2024,off-season,West Virginia,west virginia,Chad Scott (interim/bowl),2024-12-12,Permanent replacement,Rich Rodriguez
+2024,off-season,UNLV,unlv,Del Alexander (interim/bowl),2024-12-12,Permanent replacement,Dan Mullen
+2024,off-season,Wake Forest,wake forest,Dave Clawson,2024-12-16,Resigned,Jake Dickert
+2024,off-season,Sam Houston,sam houston,Brad Cornelsen (interim/bowl),2024-12-18,Permanent replacement,Phil Longo
+2024,off-season,Jacksonville State,jacksonville state,Rod Smith (interim/bowl),2024-12-20,Permanent replacement,Charles Kelly
+2024,off-season,Washington State,washington state,"Pete Kaligis (interim, bowl)",2024-12-28,Permanent replacement,Jimmy Rogers
+2024,off-season,Bowling Green,bowling green,Scot Loeffler,2025-02-28,Hired as QB coach by Philadelphia Eagles,Eddie George
+2024,off-season,Stanford,stanford,Troy Taylor,2025-03-25,Fired,Frank Reich (interim)
+2024,off-season,Kent State,kent state,Kenni Burns,2025-04-11,Fired,Mark Carney (initially interim; named permanent on October 30)
+2025,in-season,Virginia Tech,virginia tech,Brent Pry,2025-09-14,Fired,Philip Montgomery (interim)
+2025,in-season,UCLA,ucla,DeShaun Foster,2025-09-14,Fired,Tim Skipper (interim)
+2025,in-season,Oklahoma State,oklahoma state,Mike Gundy,2025-09-23,Fired,Doug Meacham (interim)
+2025,in-season,Arkansas,arkansas,Sam Pittman,2025-09-28,Fired,Bobby Petrino (interim)
+2025,in-season,Oregon State,oregon state,Trent Bray,2025-10-12,Fired,Robb Akey (interim)
+2025,in-season,Penn State,penn state,James Franklin,2025-10-12,Fired,Terry Smith (interim)
+2025,in-season,UAB,uab,Trent Dilfer,2025-10-12,Fired,Alex Mortensen
+2025,in-season,Florida,florida,Billy Napier,2025-10-19,Fired,Billy Gonzales (interim)
+2025,in-season,Colorado State,colorado state,Jay Norvell,2025-10-19,Fired,Tyson Summers (interim)
+2025,in-season,LSU,lsu,Brian Kelly,2025-10-26,Fired,Frank Wilson (interim)
+2025,in-season,Auburn,auburn,Hugh Freeze,2025-11-02,Fired,D. J. Durkin (interim)
+2025,in-season,California,california,Justin Wilcox,2025-11-23,Fired,"Nick Rolovich (interim, bowl)"
+2025,in-season,North Texas,north texas,Eric Morris,2025-11-25,Hired by Oklahoma State,"Drew Svoboda (interim, bowl)"
+2025,in-season,UConn,connecticut,Jim L. Mora,2025-11-26,Hired by Colorado State,"Gordon Sammis (interim, bowl)"
+2025,in-season,South Florida,usf,Alex Golesh,2025-11-30,Hired by Auburn,"Kevin Patrick (interim, bowl)"
+2025,in-season,Memphis,memphis,Ryan Silverfield,2025-11-30,Hired by Arkansas,"Reggie Howard (interim, bowl)"
+2025,in-season,Coastal Carolina,coastal carolina,Tim Beck,2025-11-30,Fired,"Jeremiah Johnson (interim, bowl)"
+2025,in-season,Ole Miss,ole miss,Lane Kiffin,2025-11-30,Hired by LSU,Pete Golding
+2025,in-season,Washington State,washington state,Jimmy Rogers,2025-12-05,Hired by Iowa State,"Jesse Bobbit (interim, bowl)"
+2025,in-season,Southern Miss,southern miss,Charles Huff,2025-12-06,Hired by Memphis,Blake Anderson
+2025,in-season,Toledo,toledo,Jason Candle,2025-12-06,Hired by UConn,"Robert Weiner (interim, bowl)"
+2025,in-season,Michigan,michigan,Sherrone Moore,2025-12-10,Fired,"Biff Poggi (interim, bowl)"
+2025,in-season,Missouri State,missouri state,Ryan Beard,2025-12-11,Hired by Coastal Carolina,"Nick Petrino (interim, bowl)"
+2025,in-season,Utah,utah,Kyle Whittingham,2025-12-12,Stepped down,Morgan Scalley
+2025,in-season,Ohio,ohio,Brian Smith,2025-12-17,Fired,John Hauser
+2025,off-season,Virginia Tech,virginia tech,Philip Montgomery (interim),2025-11-17,Permanent replacement,James Franklin
+2025,off-season,Oklahoma State,oklahoma state,Doug Meacham (interim),2025-11-25,Permanent replacement,Eric Morris
+2025,off-season,North Texas,north texas,"Drew Svoboda (interim, bowl)",2025-11-25,Permanent replacement,Neal Brown
+2025,off-season,Colorado State,colorado state,Tyson Summers (interim),2025-11-26,Permanent replacement,Jim L. Mora
+2025,off-season,Oregon State,oregon state,Robb Akey (interim),2025-11-28,Permanent replacement,JaMarcus Shephard
+2025,off-season,Stanford,stanford,Frank Reich (interim),2025-11-28,Permanent replacement,Tavita Pritchard
+2025,off-season,Auburn,auburn,D. J. Durkin (interim),2025-11-30,Permanent replacement,Alex Golesh
+2025,off-season,Arkansas,arkansas,Bobby Petrino (interim),2025-11-30,Permanent replacement,Ryan Silverfield
+2025,off-season,Florida,florida,Billy Gonzales (interim),2025-11-30,Permanent replacement,Jon Sumrall
+2025,off-season,Tulane,tulane,Jon Sumrall,2025-11-30,Hired by Florida,Will Hall
+2025,off-season,Michigan State,michigan state,Jonathan Smith,2025-11-30,Fired,Pat Fitzgerald
+2025,off-season,LSU,lsu,"Frank Wilson (interim, bowl)",2025-11-30,Permanent replacement,Lane Kiffin
+2025,off-season,Kentucky,kentucky,Mark Stoops,2025-11-30,Fired,Will Stein
+2025,off-season,South Florida,usf,"Kevin Patrick (interim, bowl)",2025-12-03,Permanent replacement,Brian Hartline
+2025,off-season,Kansas State,kansas state,Chris Klieman,2025-12-03,Retired,Collin Klein
+2025,off-season,California,california,"Nick Rolovich (interim, bowl)",2025-12-05,Permanent replacement,Tosh Lupoi
+2025,off-season,Penn State,penn state,"Terry Smith (interim, bowl)",2025-12-05,Permanent replacement,Matt Campbell
+2025,off-season,Iowa State,iowa state,Matt Campbell,2025-12-05,Hired by Penn State,Jimmy Rogers
+2025,off-season,UConn,connecticut,"Gordon Sammis (interim, bowl)",2025-12-06,Permanent replacement,Jason Candle
+2025,off-season,UCLA,ucla,Tim Skipper (interim),2025-12-06,Permanent replacement,Bob Chesney
+2025,off-season,James Madison,james madison,Bob Chesney,2025-12-06,Hired by UCLA,Billy Napier
+2025,off-season,Memphis,memphis,"Reggie Howard (interim, bowl)",2025-12-06,Permanent replacement,Charles Huff
+2025,off-season,Toledo,toledo,"Robert Weiner (interim, bowl)",2025-12-10,Permanent replacement,Mike Jacobs
+2025,off-season,Coastal Carolina,coastal carolina,"Jeremiah Johnson (interim, bowl)",2025-12-11,Permanent replacement,Ryan Beard
+2025,off-season,Washington State,washington state,"Jesse Bobbit (interim, bowl)",2025-12-12,Permanent replacement,Kirby Moore
+2025,off-season,Missouri State,missouri state,"Nick Petrino (interim, bowl)",2025-12-19,Permanent replacement,Casey Woods
+2025,off-season,Michigan,michigan,"Biff Poggi (interim, bowl)",2025-12-26,Permanent replacement,Kyle Whittingham
+2025,off-season,Northern Illinois,northern illinois,Thomas Hammock,2026-02-18,Hired as RB coach by Seattle Seahawks,Rob Harley (interim)

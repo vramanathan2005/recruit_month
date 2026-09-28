@@ -102,6 +102,9 @@ NUMERIC_FEATURES = [
     "nearest_visited_elsewhere_miles",
     "visited_school_miles_closer",
     "visited_home_state_school",
+    # His school's head coach fired or gone (data/coaching_changes.csv, from fetch_coaching_changes.py).
+    "coach_change_since_commit",
+    "days_since_coach_change",
 ]
 CATEGORICAL_FEATURES = ["position", "star_bucket", "distance_bucket", "is_in_state_commit", "committed_power_team"]
 FEATURES = NUMERIC_FEATURES + CATEGORICAL_FEATURES
@@ -192,6 +195,31 @@ def school_breaks(commitments: list[dict]) -> dict:
     for school in index:
         index[school].sort()
     return index
+
+
+COACHING: dict[str, list[date]] = {}   # school key → dates its head coach was fired or left
+SCHOOL_KEYS: dict[str, str] = {}       # norm_team(timeline school name) → coaching-change school key
+
+
+def load_coaching_changes(path: Path, commit_dates: Path, timeline: list[dict]) -> int:
+    from fetch_coaching_changes import school_key, timeline_school_keys
+    if not path.exists():
+        return 0
+    SCHOOL_KEYS.update(timeline_school_keys(commit_dates, timeline))
+    for row in load_csv(path):
+        if row["date"]:
+            COACHING.setdefault(row["school_key"], []).append(date.fromisoformat(row["date"]))
+    for key in COACHING:
+        COACHING[key].sort()
+    return sum(len(v) for v in COACHING.values())
+
+
+def coaching_features(school_norm: str, start: date, day: date) -> dict:
+    from fetch_coaching_changes import school_key
+    changes = COACHING.get(SCHOOL_KEYS.get(school_norm, school_key(school_norm)), [])
+    recent = [d for d in changes if day - timedelta(days=365) < d <= day]
+    return {"coach_change_since_commit": int(any(start < d <= day for d in recent)),
+            "days_since_coach_change": (day - recent[-1]).days if recent else NO_VISIT_DAYS}
 
 
 def snapshot_rows(commitments: list[dict], cutoff: date, labeled_only: bool) -> list[dict]:
@@ -306,6 +334,7 @@ def snapshot_rows(commitments: list[dict], cutoff: date, labeled_only: bool) -> 
                 "visited_school_miles_closer": (committed_miles - nearest_visited) if nearest_visited is not None and isinstance(committed_miles, (int, float)) else None,
                 "most_visits_to_one_other_school": max((sum(1 for _, s in visits_elsewhere if s == school) for school in {s for _, s in visits_elsewhere}), default=0),
                 "visited_home_state_school": int(any(str(g.get("is_in_state_commit")) == "yes" for g in visited_geo) and str(geo.get("is_in_state_commit")) != "yes"),
+                **coaching_features(school_norm, start, day),
                 "school_decommits_last_60_days": len(recent),
                 "school_class_decommits_last_60_days": sum(1 for b in recent if b[1] == class_year),
                 "program_rating_level": level,
@@ -491,6 +520,8 @@ def reasons(row: pd.Series) -> str:
         out.append(f"{int(row['power_offers_since_commit'])} power offer(s) since committing")
     if row["higher_rated_same_position_now"] >= 2:
         out.append(f"{int(row['higher_rated_same_position_now'])} higher-rated commits at his position")
+    if row["coach_change_since_commit"]:
+        out.append(f"his school's head coach left or was fired {int(row['days_since_coach_change'])} days ago")
     if row["most_visits_to_one_other_school"] >= 2:
         out.append(f"{int(row['most_visits_to_one_other_school'])} visits to the same other school")
     if row["visited_home_state_school"]:
@@ -517,6 +548,8 @@ def main() -> int:
                         help="the at-commit model's scored events, used as the baseline")
     parser.add_argument("--out-dir", type=Path, default=Path("data"))
     parser.add_argument("--cutoff", help="data cutoff (YYYY-MM-DD); default: the last decommit in the timeline")
+    parser.add_argument("--coaching-changes", type=Path, default=Path("data/coaching_changes.csv"))
+    parser.add_argument("--commit-dates", type=Path, default=Path("data/commit_dates.csv"))
     parser.add_argument("--extra-events", type=Path, default=Path("data/web_report_events.csv"),
                         help="visits/offers from the web reports (extract_web_report_events.py); rows with counted=yes are added to the timeline")
     args = parser.parse_args()
@@ -529,6 +562,8 @@ def main() -> int:
                          "event_type": row["event_type"], "event_date": row["event_date"], "school": row["school"], "source": "web report"})
     if web_events:
         print(f"added {len(web_events)} visits/offers from the web reports")
+    changes = load_coaching_changes(args.coaching_changes, args.commit_dates, timeline)
+    print(f"{changes} head coaching changes loaded" if changes else "no coaching changes file; run fetch_coaching_changes.py")
     cutoff = date.fromisoformat(args.cutoff) if args.cutoff else max(parse_date(r["event_date"]) or date.min for r in timeline if r["event_type"] == "Decommit")
     grouped = events_by_player(timeline)
     commitments = build_commitments(recruits, grouped, cutoff)

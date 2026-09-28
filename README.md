@@ -294,3 +294,15 @@ the before-signing risk), in `data/flip_boards/live_flip_destinations.csv`; the 
 main board as `likely_destinations`. A share is kept for "not on his radar yet": 41% of past flips went to
 a school with no offer or visit on record before the break. Checked on held-out classes against a
 most-recent-official-visit rule in `data/flip_destination_validation.csv`.
+
+### Coaching changes
+
+```bash
+python3 fetch_coaching_changes.py   # re-run weekly during firing season (late October through December)
+```
+
+Head coach firings and departures with dates, from Wikipedia's FBS season pages (2020 on), in
+`data/coaching_changes.csv`. The snapshot model uses "his school's head coach left or was fired since he
+committed" and the days since: historically 23% of those commitments broke within 60 days, against 7%
+without a change. (Hot-seat rankings would be an earlier warning, but they have no history to test
+against — and coacheshotseat.com blocks automated access.)
