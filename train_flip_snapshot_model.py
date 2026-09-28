@@ -97,6 +97,11 @@ NUMERIC_FEATURES = [
     "school_class_decommits_last_60_days",
     "program_rating_level",
     "rating_above_program",
+    # Geography of the schools he's visited since committing, against the one he's committed to: a New
+    # Orleans kid committed to Texas (459 miles) who keeps visiting LSU (75 miles) has a closer option.
+    "nearest_visited_elsewhere_miles",
+    "visited_school_miles_closer",
+    "visited_home_state_school",
 ]
 CATEGORICAL_FEATURES = ["position", "star_bucket", "distance_bucket", "is_in_state_commit", "committed_power_team"]
 FEATURES = NUMERIC_FEATURES + CATEGORICAL_FEATURES
@@ -239,6 +244,15 @@ def snapshot_rows(commitments: list[dict], cutoff: date, labeled_only: bool) -> 
             peers = crowd[(class_year, school_norm, position)]
             my_rating = rating_float(recruit)
             active_peers = [p for p in peers if p[3] != c["key"][1] and p[0] <= day < p[1]]
+            visited_geo = []
+            for visited in {s for _, s in visits_elsewhere}:
+                key = (recruit.get("high_school", ""), visited)
+                if key not in geo_cache:
+                    geo_cache[key] = geography_features(*key)
+                visited_geo.append(geo_cache[key])
+            visited_miles = [g["home_to_school_miles"] for g in visited_geo if isinstance(g.get("home_to_school_miles"), (int, float))]
+            committed_miles = geo.get("home_to_school_miles")
+            nearest_visited = min(visited_miles) if visited_miles else None
             recent = [b for b in breaks.get(school_norm, []) if day - timedelta(days=60) < b[0] <= day and b[2] != c["key"][1]]
             level = levels.get((school_norm, class_year))
             label = None
@@ -278,6 +292,9 @@ def snapshot_rows(commitments: list[dict], cutoff: date, labeled_only: bool) -> 
                 "same_position_commits_now": len(active_peers),
                 "higher_rated_same_position_now": sum(1 for p in active_peers if p[2] > my_rating),
                 "class_commits_now": sum(1 for p in classes[(class_year, school_norm)] if p[2] != c["key"][1] and p[0] <= day < p[1]),
+                "nearest_visited_elsewhere_miles": nearest_visited,
+                "visited_school_miles_closer": (committed_miles - nearest_visited) if nearest_visited is not None and isinstance(committed_miles, (int, float)) else None,
+                "visited_home_state_school": int(any(str(g.get("is_in_state_commit")) == "yes" for g in visited_geo) and str(geo.get("is_in_state_commit")) != "yes"),
                 "school_decommits_last_60_days": len(recent),
                 "school_class_decommits_last_60_days": sum(1 for b in recent if b[1] == class_year),
                 "program_rating_level": level,
@@ -401,6 +418,10 @@ def reasons(row: pd.Series) -> str:
         out.append(f"{int(row['power_offers_since_commit'])} power offer(s) since committing")
     if row["higher_rated_same_position_now"] >= 2:
         out.append(f"{int(row['higher_rated_same_position_now'])} higher-rated commits at his position")
+    if row["visited_home_state_school"]:
+        out.append("visited a home-state school")
+    elif pd.notna(row["visited_school_miles_closer"]) and row["visited_school_miles_closer"] >= 150:
+        out.append(f"visited a school {int(row['visited_school_miles_closer'])} miles closer to home")
     if row["school_decommits_last_60_days"] >= 3:
         out.append(f"{int(row['school_decommits_last_60_days'])} other decommits from this school in 60 days")
     # A reach commit: a clearly better prospect than the program usually lands (not a 5-star at Texas).
