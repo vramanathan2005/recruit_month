@@ -1,0 +1,5 @@
+class_year,method,snapshots,top_1_all,top_3_all,top_1_when_on_radar,top_3_when_on_radar,destination_on_radar
+2025,model,4461,0.1385,0.273,0.3732,0.7355,0.3712
+2025,visits-first rule,4461,0.0948,0.2038,0.2554,0.5489,0.3712
+2026,model,5186,0.1325,0.2499,0.3464,0.6536,0.3824
+2026,visits-first rule,5186,0.0931,0.1807,0.2436,0.4725,0.3824

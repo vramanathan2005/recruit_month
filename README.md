@@ -281,3 +281,16 @@ python3 extract_web_report_events.py
 Reads the web report articles (Tars' `.prebuild/reports-text.json.gz`) with OpenAI and keeps visits and
 offers that already happened on a stated date, that 247 doesn't have yet. `train_flip_snapshot_model.py`
 adds them to the timeline. The output (`data/web_report_events.csv`) quotes the articles, so it stays local.
+
+### Where he'd go if he flips
+
+```bash
+.venv/bin/python train_flip_destination_model.py   # after train_flip_snapshot_model.py
+```
+
+For every commitment on the live board, the odds for each school that has offered or hosted him:
+`if_he_flips` (the chance he ends up there if he flips) and `flip_to_school` (the overall chance, times
+the before-signing risk), in `data/flip_boards/live_flip_destinations.csv`; the top three are added to the
+main board as `likely_destinations`. A share is kept for "not on his radar yet": 41% of past flips went to
+a school with no offer or visit on record before the break. Checked on held-out classes against a
+most-recent-official-visit rule in `data/flip_destination_validation.csv`.
