@@ -1,13 +1,13 @@
 sample,bucket,known_events,decommit_or_flip_events,decommit_or_flip_rate,stick_rate
-train_2022_2024,Weak / Attack,371,178,0.4798,0.5202
-train_2022_2024,Vulnerable,2921,934,0.3198,0.6802
-train_2022_2024,Stable / Monitor,2174,337,0.155,0.845
-train_2022_2024,Strong,2197,144,0.0655,0.9345
-holdout_2025,Weak / Attack,197,93,0.4721,0.5279
-holdout_2025,Vulnerable,1333,364,0.2731,0.7269
-holdout_2025,Stable / Monitor,890,150,0.1685,0.8315
-holdout_2025,Strong,787,41,0.0521,0.9479
-live_2026,Weak / Attack,220,104,0.4727,0.5273
-live_2026,Vulnerable,1535,483,0.3147,0.6853
-live_2026,Stable / Monitor,898,156,0.1737,0.8263
-live_2026,Strong,725,57,0.0786,0.9214
+train_2022_2024,Weak / Attack,360,177,0.4917,0.5083
+train_2022_2024,Vulnerable,2572,893,0.3472,0.6528
+train_2022_2024,Stable / Monitor,1794,308,0.1717,0.8283
+train_2022_2024,Strong,1648,97,0.0589,0.9411
+holdout_2025,Weak / Attack,198,103,0.5202,0.4798
+holdout_2025,Vulnerable,1341,415,0.3095,0.6905
+holdout_2025,Stable / Monitor,826,152,0.184,0.816
+holdout_2025,Strong,723,49,0.0678,0.9322
+live_2026,Weak / Attack,190,104,0.5474,0.4526
+live_2026,Vulnerable,1434,465,0.3243,0.6757
+live_2026,Stable / Monitor,794,145,0.1826,0.8174
+live_2026,Strong,789,74,0.0938,0.9062

@@ -254,3 +254,22 @@ or flip within the next 60 days — the question a weekly flip board asks.
 
 Each test class is scored by models trained only on earlier classes. Results are in
 `data/flip_snapshot_summary.md`; the live board is `data/flip_boards/live_flip_risk.csv`.
+
+### Refreshing the data
+
+247 moved each player's full timeline to `/player/<slug>-<id>/timelineevents/`; the scraper uses the new
+address and still reads pages cached under the old one. Re-download only the classes still being recruited:
+
+```bash
+python3 scrape_247_commit_dates.py --refresh-years 2026 2027 2028
+```
+
+### Visits from the Tars web reports
+
+```bash
+python3 extract_web_report_events.py
+```
+
+Reads the web report articles (Tars' `.prebuild/reports-text.json.gz`) with OpenAI and keeps visits and
+offers that already happened on a stated date, that 247 doesn't have yet. `train_flip_snapshot_model.py`
+adds them to the timeline. The output (`data/web_report_events.csv`) quotes the articles, so it stays local.

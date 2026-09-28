@@ -59,7 +59,7 @@ from score_commitment_strength import (
 HORIZON_DAYS = 60
 GRID_DAYS = 14
 BOARD_SIZE = 25
-TEST_YEARS = [2025, 2026]  # each tested on a model trained on every earlier class
+TEST_YEARS = [2025, 2026, 2027]  # each tested on a model trained on every earlier class
 NO_VISIT_DAYS = 999
 SIGNING_PERIOD_DAYS = 60
 
@@ -202,7 +202,7 @@ def snapshot_rows(commitments: list[dict], cutoff: date, labeled_only: bool) -> 
         signing = early_signing_day(class_year)
         # Events before the commitment (the at-commit features) and after it, sorted by date.
         before = {"Commitment": 0, "Decommit": 0, "Offer": 0, "Official Visit": 0, "Unofficial Visit": 0}
-        after: list[tuple[date, str, str]] = []
+        after: list[tuple[date, str, str, str]] = []
         for event in c["events"]:
             day = parse_date(event["event_date"])
             if not day:
@@ -211,9 +211,9 @@ def snapshot_rows(commitments: list[dict], cutoff: date, labeled_only: bool) -> 
                 if event["event_type"] in before:
                     before[event["event_type"]] += 1
             elif day > start:
-                after.append((day, event["event_type"], norm_team(event["school"])))
+                after.append((day, event["event_type"], norm_team(event["school"]), event.get("source", "247")))
         after.sort()
-        after_days = [day for day, _, _ in after]
+        after_days = [day for day, _, _, _ in after]
 
         geo_key = (recruit.get("high_school", ""), school_norm)
         if geo_key not in geo_cache:
@@ -225,8 +225,12 @@ def snapshot_rows(commitments: list[dict], cutoff: date, labeled_only: bool) -> 
             last_grid = min(last_grid, cutoff - timedelta(days=HORIZON_DAYS))
         else:
             last_grid = min(last_grid, cutoff)
-        for day in grid_dates(start, last_grid):
-            seen = after[: bisect_right(after_days, day)]
+        days = grid_dates(start, last_grid)
+        if not labeled_only and last_grid >= start and (not days or days[-1] != last_grid):
+            days.append(last_grid)  # the live board scores every commitment as of the cutoff
+        for day in days:
+            seen_with_source = after[: bisect_right(after_days, day)]
+            seen = [(d, kind, s) for d, kind, s, _ in seen_with_source]
             elsewhere_ov = [(d, s) for d, t, s in seen if t == "Official Visit" and s != school_norm]
             elsewhere_uv = [(d, s) for d, t, s in seen if t == "Unofficial Visit" and s != school_norm]
             visits_elsewhere = elsewhere_ov + elsewhere_uv
@@ -284,6 +288,7 @@ def snapshot_rows(commitments: list[dict], cutoff: date, labeled_only: bool) -> 
                 "is_in_state_commit": str(geo.get("is_in_state_commit", "")),
                 "committed_power_team": "yes" if school_norm in POWER_TEAMS else "no",
                 "visited_schools": ", ".join(sorted({s.title() for _, s in visits_elsewhere})),
+                "web_report_events": "; ".join(f"{kind} {s.title()} {d:%-m/%-d}" for d, kind, s, source in seen_with_source if source == "web report"),
             })
     return rows
 
@@ -372,7 +377,8 @@ def reasons(row: pd.Series) -> str:
         out.append(f"{int(row['higher_rated_same_position_now'])} higher-rated commits at his position")
     if row["school_decommits_last_60_days"] >= 3:
         out.append(f"{int(row['school_decommits_last_60_days'])} other decommits from this school in 60 days")
-    if pd.notna(row["rating_above_program"]) and row["rating_above_program"] >= 0.04:
+    # A reach commit: a clearly better prospect than the program usually lands (not a 5-star at Texas).
+    if pd.notna(row["rating_above_program"]) and row["rating_above_program"] >= 0.04 and row["program_rating_level"] < 0.88:
         out.append("rated well above this program's usual recruit")
     if row["prior_decommits_at_commit"]:
         out.append("has decommitted before")
@@ -389,10 +395,18 @@ def main() -> int:
                         help="the at-commit model's scored events, used as the baseline")
     parser.add_argument("--out-dir", type=Path, default=Path("data"))
     parser.add_argument("--cutoff", help="data cutoff (YYYY-MM-DD); default: the last decommit in the timeline")
+    parser.add_argument("--extra-events", type=Path, default=Path("data/web_report_events.csv"),
+                        help="visits/offers from the web reports (extract_web_report_events.py); rows with counted=yes are added to the timeline")
     args = parser.parse_args()
 
     recruits = {(r["class_year"], r["player_id"]): r for r in dedupe_commits(load_csv(args.scores_file)) if in_high_school_cycle(r, "committed_date")}
     timeline = [r for r in load_csv(args.timeline_file) if in_high_school_cycle(r)]
+    web_events = [r for r in load_csv(args.extra_events) if r.get("counted") == "yes" and in_high_school_cycle(r)] if args.extra_events.exists() else []
+    for row in web_events:
+        timeline.append({"class_year": row["class_year"], "player_id": row["player_id"], "name": row["name"],
+                         "event_type": row["event_type"], "event_date": row["event_date"], "school": row["school"], "source": "web report"})
+    if web_events:
+        print(f"added {len(web_events)} visits/offers from the web reports")
     cutoff = date.fromisoformat(args.cutoff) if args.cutoff else max(parse_date(r["event_date"]) or date.min for r in timeline if r["event_type"] == "Decommit")
     grouped = events_by_player(timeline)
     commitments = build_commitments(recruits, grouped, cutoff)
@@ -461,7 +475,7 @@ def main() -> int:
     live["why"] = live.apply(reasons, axis=1)
     live = live.sort_values("break_probability_60d", ascending=False)
     columns = ["class_year", "name", "position", "star_bucket", "committed_school", "commitment_date", "snapshot_date",
-               "break_probability_60d", "why", "visited_schools", "official_visits_elsewhere", "unofficial_visits_elsewhere",
+               "break_probability_60d", "why", "visited_schools", "web_report_events", "official_visits_elsewhere", "unofficial_visits_elsewhere",
                "power_offers_since_commit", "days_committed", "days_to_signing", "rating", "player_id", "profile_url"]
     (args.out_dir / "flip_boards").mkdir(parents=True, exist_ok=True)
     live[columns].to_csv(args.out_dir / "flip_boards" / "live_flip_risk.csv", index=False)

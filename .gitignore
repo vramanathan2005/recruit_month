@@ -1,3 +1,7 @@
 data/cache/
 __pycache__/
 .DS_Store
+
+# Excerpts from the Tars web reports: rebuilt locally by extract_web_report_events.py, not published.
+data/web_report_events.csv
+data/scrape_refresh.log

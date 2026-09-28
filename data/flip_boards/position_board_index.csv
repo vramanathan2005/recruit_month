@@ -19,11 +19,11 @@ all,WR,25,data/flip_boards/weakest_wr_commits.csv
 2027,DL,25,data/flip_boards/weakest_2027_dl_commits.csv
 2027,Edge,25,data/flip_boards/weakest_2027_edge_commits.csv
 2027,IOL,25,data/flip_boards/weakest_2027_iol_commits.csv
-2027,K,2,data/flip_boards/weakest_2027_k_commits.csv
+2027,K,19,data/flip_boards/weakest_2027_k_commits.csv
 2027,LB,25,data/flip_boards/weakest_2027_lb_commits.csv
-2027,LS,1,data/flip_boards/weakest_2027_ls_commits.csv
+2027,LS,10,data/flip_boards/weakest_2027_ls_commits.csv
 2027,OT,25,data/flip_boards/weakest_2027_ot_commits.csv
-2027,P,1,data/flip_boards/weakest_2027_p_commits.csv
+2027,P,10,data/flip_boards/weakest_2027_p_commits.csv
 2027,QB,25,data/flip_boards/weakest_2027_qb_commits.csv
 2027,RB,25,data/flip_boards/weakest_2027_rb_commits.csv
 2027,S,25,data/flip_boards/weakest_2027_s_commits.csv

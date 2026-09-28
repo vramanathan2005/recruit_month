@@ -29,7 +29,7 @@ from bs4 import BeautifulSoup
 
 
 BASE = "https://247sports.com"
-YEARS = (2022, 2023, 2024, 2025, 2026, 2027)
+YEARS = (2022, 2023, 2024, 2025, 2026, 2027, 2028)
 HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -116,20 +116,25 @@ def parse_date(value: str) -> date | None:
 
 
 class Fetcher:
-    def __init__(self, cache_dir: Path, delay: float, refresh: bool = False):
+    def __init__(self, cache_dir: Path, delay: float, refresh: bool = False, refresh_years: set[int] | None = None):
         self.cache_dir = cache_dir
         self.delay = delay
         self.refresh = refresh
+        # Classes still being recruited: their pages are re-downloaded; finished classes reuse the cache.
+        self.refresh_years = refresh_years or set()
         self.session = requests.Session()
         self.session.headers.update(HEADERS)
         self.last_fetch = 0.0
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
-    def get(self, url: str, params: dict[str, str] | None = None) -> str:
+    def refresh_for(self, year: int) -> bool:
+        return self.refresh or year in self.refresh_years
+
+    def get(self, url: str, params: dict[str, str] | None = None, refresh: bool | None = None) -> str:
         params = params or {}
         key = url + "?" + "&".join(f"{k}={v}" for k, v in sorted(params.items()))
         cache_file = self.cache_dir / (hashlib.sha1(key.encode("utf-8")).hexdigest() + ".html")
-        if cache_file.exists() and not self.refresh:
+        if cache_file.exists() and not (self.refresh if refresh is None else refresh):
             return cache_file.read_text(encoding="utf-8")
 
         elapsed = time.time() - self.last_fetch
@@ -372,6 +377,12 @@ def timeline_school_from_body(body: str, event_type: str, player_name: str) -> s
     return norm_space(match.group(1)) if match else ""
 
 
+def timeline_url(profile_url: str) -> str:
+    """https://247sports.com/player/<slug>-<id>/high-school-<n>/ → .../player/<slug>-<id>/timelineevents/"""
+    match = re.match(r"(https?://[^/]+/player/[^/]+)/", profile_url.rstrip("/") + "/", re.I)
+    return (match.group(1) if match else profile_url.rstrip("/")) + "/timelineevents/"
+
+
 def scrape_timeline_events(
     fetcher: Fetcher,
     rankings: list[RankingRow],
@@ -379,15 +390,28 @@ def scrape_timeline_events(
 ) -> list[TimelineEventRow]:
     rows: list[TimelineEventRow] = []
 
+    failed: list[str] = []
+
     def scrape_one(recruit: RankingRow) -> list[TimelineEventRow]:
         if not recruit.profile_url:
             return []
-        url = recruit.profile_url.rstrip("/") + "/timelineevents/"
+        # 247 moved the full timeline from .../player/<slug>-<id>/high-school-<n>/timelineevents/ (now a
+        # 404) to .../player/<slug>-<id>/timelineevents/. Pages cached under the old address are still
+        # used for classes that aren't being refreshed, so finished classes aren't re-downloaded.
+        legacy_url = recruit.profile_url.rstrip("/") + "/timelineevents/"
+        url = timeline_url(recruit.profile_url)
+        refresh = fetcher.refresh_for(recruit.class_year)
+        legacy_cache = cache_path_for(fetcher.cache_dir, legacy_url)
+        if not refresh and legacy_cache.exists():
+            return parse_timeline_events(legacy_cache.read_text(encoding="utf-8"), recruit)
         try:
-            html = fetch_detail_html(fetcher.cache_dir, url, fetcher.refresh)
-            return parse_timeline_events(html, recruit)
+            html = fetch_detail_html(fetcher.cache_dir, url, refresh)
         except requests.RequestException:
-            return []
+            failed.append(recruit.profile_url)
+            if not legacy_cache.exists():
+                return []
+            html = legacy_cache.read_text(encoding="utf-8")
+        return parse_timeline_events(html, recruit)
 
     completed = 0
     with ThreadPoolExecutor(max_workers=workers) as executor:
@@ -396,7 +420,9 @@ def scrape_timeline_events(
             completed += 1
             rows.extend(future.result() or [])
             if completed % 500 == 0 or completed == len(rankings):
-                print(f"timeline events {completed}/{len(rankings)}: {len(rows)} events", flush=True)
+                print(f"timeline events {completed}/{len(rankings)}: {len(rows)} events, {len(failed)} failed", flush=True)
+    if failed:
+        print(f"WARNING: {len(failed)} timeline pages failed to download (kept the cached copy where there was one)", flush=True)
     return rows
 
 
@@ -413,7 +439,7 @@ def scrape_recruitment_details(
 
     def scrape_one(recruit: RankingRow) -> RecruitmentDetailRow | None:
         try:
-            html = fetch_detail_html(fetcher.cache_dir, recruit.recruitment_url, fetcher.refresh)
+            html = fetch_detail_html(fetcher.cache_dir, recruit.recruitment_url, fetcher.refresh_for(recruit.class_year))
             return parse_recruitment_detail(html, recruit)
         except requests.RequestException:
             return None
@@ -445,7 +471,7 @@ def scrape_paged(
     while max_pages is None or page <= max_pages:
         params = dict(base_params or {})
         params["Page"] = str(page)
-        html = fetcher.get(url, params=params)
+        html = fetcher.get(url, params=params, refresh=fetcher.refresh_for(class_year))
         page_rows = parser(html, class_year)
         print(f"{class_year} {label} page {page}: {len(page_rows)} rows", flush=True)
         if not page_rows:
@@ -611,7 +637,9 @@ def main() -> int:
     parser.add_argument("--out-dir", type=Path, default=Path("data"))
     parser.add_argument("--cache-dir", type=Path, default=Path("data/cache"))
     parser.add_argument("--delay", type=float, default=0.35)
-    parser.add_argument("--refresh", action="store_true")
+    parser.add_argument("--refresh", action="store_true", help="Re-download every page.")
+    parser.add_argument("--refresh-years", nargs="+", type=int, default=[],
+                        help="Re-download only these classes' pages (the ones still being recruited).")
     parser.add_argument("--max-pages", type=int, default=None, help="Debug limit per source/year.")
     parser.add_argument("--skip-recruitment-details", action="store_true")
     parser.add_argument("--skip-commit-pages", action="store_true")
@@ -621,7 +649,7 @@ def main() -> int:
     parser.add_argument("--timeline-workers", type=int, default=8)
     args = parser.parse_args()
 
-    fetcher = Fetcher(args.cache_dir, args.delay, args.refresh)
+    fetcher = Fetcher(args.cache_dir, args.delay, args.refresh, set(args.refresh_years))
     rankings: list[RankingRow] = []
     commits: list[CommitRow] = []
     details: list[RecruitmentDetailRow] = []
