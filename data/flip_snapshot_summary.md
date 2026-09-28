@@ -46,7 +46,7 @@
 | logistic | all snapshots | 2027 | 21 | 0.2038 | 0.0834 | 2.44 |
 | boosted | all snapshots | 2027 | 21 | 0.2514 | 0.0834 | 3.01 |
 
-## Calibration (test classes)
+## Calibration (test classes, raw model)
 
 | model | bucket | snapshots | predicted | actual |
 | --- | --- | --- | --- | --- |
@@ -62,4 +62,23 @@
 | boosted | 10-20% | 13337 | 0.1293 | 0.1779 |
 | boosted | 20-35% | 978 | 0.2435 | 0.3466 |
 | boosted | 35%+ | 188 | 0.4722 | 0.6011 |
+
+## Recalibration by stage of the cycle (fit on one class, checked on the other)
+
+The live board's `break_probability_60d` is the raw score recalibrated this way, fit on both classes.
+
+| fit_on | checked_on | stage | snapshots | raw | calibrated | actual |
+| --- | --- | --- | --- | --- | --- | --- |
+| 2025 | 2026 | 180+ days out | 7674 | 0.0642 | 0.0945 | 0.0722 |
+| 2025 | 2026 | 90-180 days out | 12265 | 0.038 | 0.0281 | 0.0396 |
+| 2025 | 2026 | 60-90 days out | 4304 | 0.0819 | 0.1272 | 0.1364 |
+| 2025 | 2026 | 30-60 days out | 4332 | 0.1062 | 0.1363 | 0.1674 |
+| 2025 | 2026 | 0-30 days out | 4857 | 0.0893 | 0.1073 | 0.1295 |
+| 2025 | 2026 | after early signing day | 1582 | 0.0313 | 0.1094 | 0.0841 |
+| 2026 | 2025 | 180+ days out | 6720 | 0.0509 | 0.0568 | 0.0747 |
+| 2026 | 2025 | 90-180 days out | 11459 | 0.0393 | 0.0408 | 0.0291 |
+| 2026 | 2025 | 60-90 days out | 4307 | 0.0722 | 0.1209 | 0.1131 |
+| 2026 | 2025 | 30-60 days out | 4380 | 0.1046 | 0.1651 | 0.1342 |
+| 2026 | 2025 | 0-30 days out | 5288 | 0.0871 | 0.1267 | 0.105 |
+| 2026 | 2025 | after early signing day | 3119 | 0.0199 | 0.0487 | 0.0792 |
 

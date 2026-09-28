@@ -363,6 +363,32 @@ def calibration(frame: pd.DataFrame, column: str) -> list[dict]:
              "actual": round(float(g["target"].mean()), 4)} for bucket, g in frame.groupby("bucket", observed=True)]
 
 
+STAGES = ["after early signing day", "0-30 days out", "30-60 days out", "60-90 days out", "90-180 days out", "180+ days out"]
+CALIBRATION_CLASSES = [2025, 2026]  # full cycles of held-out predictions
+
+
+def stage(days_to_signing: pd.Series) -> pd.Series:
+    return pd.cut(days_to_signing, [-9999, 0, 30, 60, 90, 180, 9999], labels=STAGES).astype(str)
+
+
+def calibration_design(probability: pd.Series, days_to_signing: pd.Series) -> pd.DataFrame:
+    p = probability.clip(1e-4, 1 - 1e-4).to_numpy()
+    logit = np.log(p / (1 - p))
+    stages = stage(days_to_signing).to_numpy()
+    design = pd.DataFrame({"logit": logit})
+    for name in STAGES:
+        design[name] = (stages == name).astype(float)
+        design[f"logit x {name}"] = design[name] * logit
+    return design
+
+
+def fit_calibrator(probability: pd.Series, days_to_signing: pd.Series, target: pd.Series) -> LogisticRegression:
+    """Held-out predictions ran low late in the cycle (60-90 days out: 7.7% predicted, 12.5% actual), so raw
+    scores are mapped to break rates separately for each stretch of the calendar. Within a stretch the
+    mapping is increasing, so a board's order on any date doesn't change — only the percentages."""
+    return LogisticRegression(max_iter=2000).fit(calibration_design(probability, days_to_signing), target)
+
+
 def reasons(row: pd.Series) -> str:
     out = []
     if row["official_visits_elsewhere"]:
@@ -457,6 +483,25 @@ def main() -> int:
     for name in ["logistic", "boosted"]:
         validation.append({"model": name, "rows": "training data", **metrics(f"train_{first_train['class_year'].min()}_{TEST_YEARS[0] - 1}", first_train["target"], first_train[f"{name}_train_probability"])})
 
+    # Recalibration by stage, checked on the class it wasn't fit to (fit 2025 → check 2026, and back).
+    stage_rows = []
+    for fit_year, check_year in [(2025, 2026), (2026, 2025)]:
+        fit, check = frame[frame["class_year"] == fit_year], frame[frame["class_year"] == check_year].copy()
+        calibrator = fit_calibrator(fit["boosted_probability"], fit["days_to_signing"], fit["target"])
+        check["calibrated"] = calibrator.predict_proba(calibration_design(check["boosted_probability"], check["days_to_signing"]))[:, 1]
+        check["stage"] = stage(check["days_to_signing"])
+        for name, group in check.groupby("stage", sort=False):
+            stage_rows.append({"fit_on": fit_year, "checked_on": check_year, "stage": name, "snapshots": len(group),
+                               "raw": round(float(group["boosted_probability"].mean()), 4),
+                               "calibrated": round(float(group["calibrated"].mean()), 4),
+                               "actual": round(float(group["target"].mean()), 4)})
+    stage_df = pd.DataFrame(stage_rows)
+    stage_df["stage"] = pd.Categorical(stage_df["stage"], STAGES[::-1], ordered=True)
+    stage_df = stage_df.sort_values(["fit_on", "stage"])
+    stage_df.to_csv(args.out_dir / "flip_snapshot_stage_calibration.csv", index=False)
+    held_out = frame[frame["class_year"].isin(CALIBRATION_CLASSES)]
+    calibrator = fit_calibrator(held_out["boosted_probability"], held_out["days_to_signing"], held_out["target"])
+
     validation_df, boards_df, calib_df = pd.DataFrame(validation), pd.DataFrame(boards), pd.DataFrame(calib)
     validation_df.to_csv(args.out_dir / "flip_snapshot_validation.csv", index=False)
     boards_df.to_csv(args.out_dir / "flip_snapshot_board_backtest.csv", index=False)
@@ -471,12 +516,13 @@ def main() -> int:
     live = live[(live["snapshot_date"] == live.groupby(["class_year", "player_id", "commitment_date"])["snapshot_date"].transform("max"))]
     live = live[pd.to_datetime(live["snapshot_date"]).dt.date > cutoff - timedelta(days=GRID_DAYS)]
     live = live[live.apply(lambda r: date.fromisoformat(r["snapshot_date"]) < high_school_cycle_cutoff(int(r["class_year"])), axis=1)]
-    live["break_probability_60d"] = final.predict_proba(live[FEATURES])[:, 1].round(4)
+    live["model_raw_probability"] = final.predict_proba(live[FEATURES])[:, 1].round(4)
+    live["break_probability_60d"] = calibrator.predict_proba(calibration_design(live["model_raw_probability"], live["days_to_signing"]))[:, 1].round(4) if best == "boosted" else live["model_raw_probability"]
     live["why"] = live.apply(reasons, axis=1)
     live = live.sort_values("break_probability_60d", ascending=False)
     columns = ["class_year", "name", "position", "star_bucket", "committed_school", "commitment_date", "snapshot_date",
                "break_probability_60d", "why", "visited_schools", "web_report_events", "official_visits_elsewhere", "unofficial_visits_elsewhere",
-               "power_offers_since_commit", "days_committed", "days_to_signing", "rating", "player_id", "profile_url"]
+               "power_offers_since_commit", "days_committed", "days_to_signing", "model_raw_probability", "rating", "player_id", "profile_url"]
     (args.out_dir / "flip_boards").mkdir(parents=True, exist_ok=True)
     live[columns].to_csv(args.out_dir / "flip_boards" / "live_flip_risk.csv", index=False)
 
@@ -487,7 +533,10 @@ def main() -> int:
         f"- Live board model: {best} (higher test AUC), refit on all labeled snapshots; {len(live):,} active commitments scored as of {cutoff}.", "",
         "## Test classes", "", markdown(validation_df), "",
         f"## Weekly board check (top {BOARD_SIZE} on each date)", "", markdown(boards_df), "",
-        "## Calibration (test classes)", "", markdown(calib_df), "",
+        "## Calibration (test classes, raw model)", "", markdown(calib_df), "",
+        "## Recalibration by stage of the cycle (fit on one class, checked on the other)", "",
+        "The live board's `break_probability_60d` is the raw score recalibrated this way, fit on both classes.", "",
+        markdown(stage_df), "",
     ]
     (args.out_dir / "flip_snapshot_summary.md").write_text("\n".join(summary) + "\n", encoding="utf-8")
     print("\n".join(summary))
