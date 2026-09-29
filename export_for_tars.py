@@ -284,8 +284,7 @@ def build() -> list[dict]:
                 for c in cands.itertuples():
                     entry = {"school": school(c.school_key), "ifFlips": round(float(c.if_he_flips), 4), "overall": round(float(c.if_he_flips) * leaves, 4),
                              "why": destination_reasons(c.why)}
-                    if len(destinations) < 6:
-                        destinations.append(entry)
+                    destinations.append(entry)          # every school on his radar, most likely first
                     if c.school_key == "texas":
                         texas = entry
             not_recruiting = float(lv.get("not_on_radar_if_flips") or 0)
