@@ -59,7 +59,7 @@ from score_commitment_strength import (
 HORIZON_DAYS = 60
 GRID_DAYS = 14
 BOARD_SIZE = 25
-TEST_YEARS = [2025, 2026, 2027]  # each tested on a model trained on every earlier class
+TEST_YEARS = [2024, 2025, 2026, 2027]  # each tested on a model trained on every earlier class
 NO_VISIT_DAYS = 999
 SIGNING_PERIOD_DAYS = 60
 
@@ -302,13 +302,23 @@ def picks_as_of(player_id: str, day: date) -> list[dict] | None:
     return standing
 
 
+def switched_away(pick: dict, school_norm: str) -> bool:
+    """An insider's pick moved away from the player's school. On3 left the "switched from" school blank for
+    most of the 2026 cycle (April-December 2025, while it merged in Rivals' prediction system) even though
+    the pick change itself (a previous-pick date) is there — so a changed pick for another school with no
+    "from" school counts as a likely switch away (insiders pick a committed player's school almost always)."""
+    if pick["flipped_from"]:
+        return same_school(pick["flipped_from"], school_norm)
+    return (pick.get("previous_date") or "0001")[:4] not in ("0001", "") and not same_school(pick["school"], school_norm)
+
+
 def on3_features(player_id: str, school_norm: str, day: date) -> dict:
     standing = picks_as_of(player_id, day)
     if standing is None:
         return {"on3_picks_other_school": None, "on3_switched_away": None, "on3_best_accuracy_other": None, "on3_max_confidence_other": None}
     other = [p for p in standing if p["school"] and not same_school(p["school"], school_norm)]
     return {"on3_picks_other_school": len(other),
-            "on3_switched_away": sum(1 for p in other if p["flipped_from"] and same_school(p["flipped_from"], school_norm)),
+            "on3_switched_away": sum(1 for p in other if switched_away(p, school_norm)),
             "on3_best_accuracy_other": max((float(p["expert_accuracy"] or 0) for p in other), default=0.0),
             "on3_max_confidence_other": max((float(p["confidence"] or 0) for p in other), default=0.0)}
 
@@ -553,7 +563,7 @@ def calibration(frame: pd.DataFrame, column: str) -> list[dict]:
 
 
 STAGES = ["after early signing day", "0-30 days out", "30-60 days out", "60-90 days out", "90-180 days out", "180+ days out"]
-CALIBRATION_CLASSES = [2025, 2026]  # full cycles of held-out predictions
+CALIBRATION_CLASSES = [2024, 2025, 2026]  # full cycles of held-out predictions
 
 
 def stage(days_to_signing: pd.Series) -> pd.Series:
@@ -686,11 +696,15 @@ def before_signing_model(all_rows: pd.DataFrame, live: pd.DataFrame) -> tuple[pd
                          "auc": round(float(roc_auc_score(group["target_before_signing"], group["before_signing_oos"])), 4) if group["target_before_signing"].nunique() > 1 else None,
                          "calibrated": round(float(group["calibrated"].mean()), 4), "actual": round(float(group["target_before_signing"].mean()), 4)})
     held_out = frame[frame["class_year"].isin(CALIBRATION_CLASSES)]
+    # Kept for the Bayesian layer (bayes_layer.py): held-out tree scores with every feature and the outcome.
+    Path("data/cache").mkdir(parents=True, exist_ok=True)
+    held_out.to_pickle("data/cache/before_signing_held_out.pkl")
     calibrator = Calibrator(use_blend).fit(held_out["before_signing_oos"], held_out, held_out["target_before_signing"])
     final = boosted_model()
     final.fit(frame[FEATURES], frame["target_before_signing"])
     raw = pd.Series(final.predict_proba(live[FEATURES])[:, 1], index=live.index)
     full = pd.Series(calibrator.predict(raw, live), index=live.index)
+    live.assign(before_signing_raw=raw, before_signing_full=full).to_pickle("data/cache/before_signing_live.pkl")
     probability, live["before_signing_low"], live["before_signing_high"] = bootstrap_range(frame, "target_before_signing", live, calibrator, full)
     return pd.DataFrame(rows), probability, calibrator
 
@@ -852,6 +866,10 @@ def main() -> int:
     live = numeric_features(pd.DataFrame(snapshot_rows(commitments, cutoff, labeled_only=False)))
     live = live[(live["snapshot_date"] == live.groupby(["class_year", "player_id", "commitment_date"])["snapshot_date"].transform("max"))]
     live = live[pd.to_datetime(live["snapshot_date"]).dt.date > cutoff - timedelta(days=GRID_DAYS)]
+    # Only commitments still standing on the data date: one that broke in the last two weeks (Kavarris Duncan,
+    # Tulane → Alabama on 9/20) would otherwise still show with its last snapshot.
+    active = {(c["class_year"], str(c["key"][1]), c["start"].isoformat()) for c in commitments if c["end"] > cutoff}
+    live = live[[(int(r.class_year), str(r.player_id), r.commitment_date) in active for r in live.itertuples()]]
     live = live[live.apply(lambda r: date.fromisoformat(r["snapshot_date"]) < high_school_cycle_cutoff(int(r["class_year"])), axis=1)]
     live["model_raw_probability"] = final.predict_proba(live[FEATURES])[:, 1].round(4)
     full = pd.Series(calibrator.predict(live["model_raw_probability"], live), index=live.index)

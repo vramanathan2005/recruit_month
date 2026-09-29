@@ -306,3 +306,19 @@ Head coach firings and departures with dates, from Wikipedia's FBS season pages 
 committed" and the days since: historically 23% of those commitments broke within 60 days, against 7%
 without a change. (Hot-seat rankings would be an earlier warning, but they have no history to test
 against — and coacheshotseat.com blocks automated access.)
+
+### Bayesian layer: insider switches
+
+```bash
+.venv/bin/python train_flip_snapshot_model.py    # tree model; saves data/cache/before_signing_*.pkl
+.venv/bin/python bayes_layer.py                   # adjusts the board for players with an On3 insider switch
+.venv/bin/python train_flip_destination_model.py  # destinations, using the adjusted numbers
+.venv/bin/python bayes_layer.py --check           # leave-one-class-out test (2024-26)
+```
+
+When an On3 insider has switched his pick away from a player's school, the tree underrates it (it can't learn
+from a few dozen cases), so a small Bayesian layer multiplies the tree's odds: about x5.6 for a switch under 45
+days old, x1.9 for an older one (a player still committed six weeks after insiders switch usually holds). Each
+multiplier is learned as a range from 2024-26 and the old one borrows from the fresh one. Players without a
+switch keep the tree's number. Checked by learning from two classes and testing on the third: ranking and the
+weekly top-25 hit rate equal or better in all three.
