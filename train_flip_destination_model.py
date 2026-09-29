@@ -27,6 +27,7 @@ Outputs (data/):
 from __future__ import annotations
 
 import argparse
+import re
 from bisect import bisect_right
 from datetime import date, timedelta
 from pathlib import Path
@@ -57,6 +58,7 @@ CANDIDATE_NUMERIC = [
     "unofficial_visits_since_commit", "visits_total", "days_since_last_visit", "earlier_commitment",
     "miles_from_home", "miles_closer_than_committed", "program_level", "rating_above_program",
     "position_commits_there_now", "candidates", "visit_recency_rank",
+    "visited_since_commit", "other_schools_visited_since_commit",
     "insider_flip_mentions_90d", "insider_prediction_mentions_90d", "insider_national_mentions_90d", "insider_pursuer_site_mentions_90d",
     "on3_picks_for_school",
 ]
@@ -66,9 +68,14 @@ CANDIDATE_FEATURES = CANDIDATE_NUMERIC + CANDIDATE_CATEGORICAL
 COVERAGE_FEATURES = ["rating", "candidates", "offers_on_record", "official_visits_elsewhere_since_commit", "any_visit_elsewhere_since_commit", "days_to_break_or_cutoff_unknown"]
 
 
+def school_of(event: dict) -> str:
+    """247 sometimes appends visit text to the school ("Tennessee Volunteers (March 27-28) for spring practice")."""
+    return norm_team(re.sub(r"\s*\(.*$", "", event["school"] or ""))
+
+
 def destination(c: dict) -> str | None:
     """The next school he committed to, signed with or enrolled at after the break (not the one he left)."""
-    after = sorted((parse_date(e["event_date"]), e["event_type"], norm_team(e["school"])) for e in c["events"]
+    after = sorted((parse_date(e["event_date"]), e["event_type"], school_of(e)) for e in c["events"]
                    if parse_date(e["event_date"]) and parse_date(e["event_date"]) >= c["broke_on"])
     return next((s for _, t, s in after if t in ARRIVAL_TYPES and s != c["school_norm"]), None)
 
@@ -78,7 +85,7 @@ def candidate_rows(c: dict, day: date, geo_cache: dict, levels: dict, crowd: dic
     school = c["school_norm"]
     recruit = c["recruit"]
     rating = rating_float(recruit)
-    known = [(parse_date(e["event_date"]), e["event_type"], norm_team(e["school"])) for e in c["events"]]
+    known = [(parse_date(e["event_date"]), e["event_type"], school_of(e)) for e in c["events"]]
     known = [(d, t, s) for d, t, s in known if d and d <= day and s and s != school]
     by_school: dict[str, list[tuple[date, str]]] = {}
     for d, t, s in known:
@@ -94,6 +101,7 @@ def candidate_rows(c: dict, day: date, geo_cache: dict, levels: dict, crowd: dic
     covered = bool(INSIDER) and day >= INSIDER_COVERAGE_START + timedelta(days=30)
     standing = picks_as_of(c["key"][1], day)
     talk = [r for r in INSIDER.get(c["key"][1], []) if day - timedelta(days=90) < r[0] <= day] if covered else []
+    visited_since = {s for s, ev in by_school.items() if any("Visit" in t and d > c["start"] for d, t in ev)}
     rows = []
     for s, ev in by_school.items():
         if (home_key, s) not in geo_cache:
@@ -113,6 +121,9 @@ def candidate_rows(c: dict, day: date, geo_cache: dict, levels: dict, crowd: dic
             "visits_total": sum(1 for _, t in ev if "Visit" in t),
             "days_since_last_visit": (day - last_visit[s]).days if last_visit.get(s) else NEVER,
             "earlier_commitment": int(any(t == "Commitment" for _, t in ev)),
+            # Context: an offer-only school matters little when he's been visiting others since committing.
+            "visited_since_commit": int(s in visited_since),
+            "other_schools_visited_since_commit": len(visited_since - {s}),
             "miles_from_home": miles,
             "miles_closer_than_committed": (committed_miles - miles) if miles is not None and isinstance(committed_miles, (int, float)) else None,
             "program_level": level,
@@ -158,11 +169,45 @@ def coverage_model() -> LogisticRegression:
     return LogisticRegression(max_iter=3000)
 
 
-def share_out(frame: pd.DataFrame, score: str, coverage: pd.Series) -> pd.Series:
-    """Candidate scores → P(X | goes elsewhere): normalized within each snapshot, times the snapshot's
-    chance the destination is one of his candidates at all."""
-    total = frame.groupby("snapshot_id")[score].transform("sum")
-    return frame[score] / total * frame["snapshot_id"].map(coverage)
+def share_out(frame: pd.DataFrame, score: str, coverage: pd.Series, alpha: float = 1.0) -> pd.Series:
+    """Candidate scores → P(X | goes elsewhere): score^alpha normalized within each snapshot, times the
+    snapshot's chance the destination is one of his candidates at all. alpha > 1 lets clear favorites take
+    more of the share (learned from past classes by fit_sharpness, not set by hand)."""
+    powered = frame[score].clip(lower=1e-6) ** alpha
+    return powered / powered.groupby(frame["snapshot_id"]).transform("sum") * frame["snapshot_id"].map(coverage)
+
+
+def visiting(frame: pd.DataFrame) -> pd.Series:
+    """Per candidate row: is the player visiting schools since committing (a focused recruitment)?"""
+    return frame.groupby("snapshot_id")["visited_since_commit"].transform("max") == 1
+
+
+def fit_sharpness_by_group(frame: pd.DataFrame, score: str) -> dict[bool, float]:
+    """Separate sharpness for focused recruitments (visiting schools since committing: past flippers went to
+    one of those 89% of the time for 4-5 stars) and everyone else."""
+    group = visiting(frame)
+    return {True: fit_sharpness(frame[group], score), False: fit_sharpness(frame[~group], score)}
+
+
+def share_out_grouped(frame: pd.DataFrame, score: str, coverage: pd.Series, alphas: dict[bool, float]) -> pd.Series:
+    group = visiting(frame)
+    alpha = group.map(alphas)
+    powered = frame[score].clip(lower=1e-6) ** alpha
+    return powered / powered.groupby(frame["snapshot_id"]).transform("sum") * frame["snapshot_id"].map(coverage)
+
+
+def fit_sharpness(frame: pd.DataFrame, score: str) -> float:
+    """The alpha that best predicts which candidate past flippers actually chose (log-likelihood of the true
+    destination among his candidates), searched over 0.5-5."""
+    covered = frame[frame.groupby("snapshot_id")["target"].transform("max") == 1]
+    best, best_ll = 1.0, -np.inf
+    for alpha in np.arange(0.5, 5.01, 0.1):
+        powered = covered[score].clip(lower=1e-6) ** alpha
+        share = powered / powered.groupby(covered["snapshot_id"]).transform("sum")
+        ll = float(np.log(share[covered["target"] == 1].clip(lower=1e-9)).sum())
+        if ll > best_ll:
+            best, best_ll = float(alpha), ll
+    return round(best, 2)
 
 
 def build_training(commitments: list[dict], cutoff: date) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -235,24 +280,27 @@ def main() -> int:
     print(f"{snapshots['snapshot_id'].nunique():,} snapshots before past breaks; "
           f"{len(frame):,} candidate rows; destination on his radar {snapshots['destination_is_candidate'].mean():.1%}")
 
-    validation, calibration = [], []
+    validation, calibration, scored = [], [], {}
     for year in TEST_YEARS:
         train, test = frame[frame["class_year"] < year], frame[frame["class_year"] == year].copy()
         s_train, s_test = snapshots[snapshots["class_year"] < year], snapshots[snapshots["class_year"] == year]
         model = candidate_model().fit(train[CANDIDATE_FEATURES], train["target"])
         test["score"] = model.predict_proba(test[CANDIDATE_FEATURES])[:, 1]
         cover = coverage_model().fit(s_train[COVERAGE_FEATURES], s_train["destination_is_candidate"])
-        coverage = pd.Series(cover.predict_proba(s_test[COVERAGE_FEATURES])[:, 1], index=s_test["snapshot_id"].to_numpy())
-        test["probability"] = share_out(test, "score", coverage)
+        scored[year] = (test, s_test, pd.Series(cover.predict_proba(s_test[COVERAGE_FEATURES])[:, 1], index=s_test["snapshot_id"].to_numpy()))
+    for year, (test, s_test, coverage) in scored.items():
+        others = pd.concat([scored[y][0] for y in scored if y != year])
+        alpha = fit_sharpness_by_group(others, "score")
+        test["probability"] = share_out_grouped(test, "score", coverage, alpha)
         test["rule"] = visits_first_rule(test)
-        validation.append({"class_year": year, **evaluate(test, s_test, "probability", "model")})
+        validation.append({"class_year": year, "sharpness_visiting": alpha[True], "sharpness_other": alpha[False], **evaluate(test, s_test, "probability", "model")})
         validation.append({"class_year": year, **evaluate(test, s_test, "rule", "visits-first rule")})
         bins = [0, 0.05, 0.1, 0.2, 0.35, 0.5, 1.0]
         test["bucket"] = pd.cut(test["probability"], bins, labels=["0-5%", "5-10%", "10-20%", "20-35%", "35-50%", "50%+"], include_lowest=True)
         for bucket, g in test.groupby("bucket", observed=True):
             calibration.append({"class_year": year, "bucket": str(bucket), "candidates": len(g),
                                 "predicted": round(float(g["probability"].mean()), 4), "actual": round(float(g["target"].mean()), 4)})
-        print(f"tested on {year}")
+        print(f"tested on {year} (sharpness {alpha}, fit on the other class)")
     validation_df, calibration_df = pd.DataFrame(validation), pd.DataFrame(calibration)
     validation_df.to_csv(args.out_dir / "flip_destination_validation.csv", index=False)
     calibration_df.to_csv(args.out_dir / "flip_destination_calibration.csv", index=False)
@@ -283,7 +331,9 @@ def main() -> int:
     live[CANDIDATE_NUMERIC] = live[CANDIDATE_NUMERIC].apply(pd.to_numeric, errors="coerce")
     live["score"] = model.predict_proba(live[CANDIDATE_FEATURES])[:, 1]
     coverage = pd.Series(cover.predict_proba(live_snap[COVERAGE_FEATURES])[:, 1], index=live_snap["snapshot_id"].to_numpy())
-    live["if_he_flips"] = share_out(live, "score", coverage)
+    live_alpha = fit_sharpness_by_group(pd.concat([s[0] for s in scored.values()]), "score")
+    print(f"sharpness for the live board: visiting schools since committing {live_alpha[True]}, others {live_alpha[False]}")
+    live["if_he_flips"] = share_out_grouped(live, "score", coverage, live_alpha)
     live["flip_to_school"] = live["break_before_signing"] * goes_elsewhere * live["if_he_flips"]
 
     def why(r) -> str:
