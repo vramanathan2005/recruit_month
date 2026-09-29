@@ -1,16 +1,16 @@
 model,rows,class_year,board_dates,top_25_hit_rate,board_base_rate,lift
-at_commit,same as at-commit,2025,35,0.2046,0.0892,2.29
-logistic,same as at-commit,2025,35,0.2549,0.0892,2.86
-boosted,same as at-commit,2025,35,0.2686,0.0892,3.01
-logistic,all snapshots,2025,35,0.2457,0.0783,3.14
-boosted,all snapshots,2025,35,0.2571,0.0783,3.28
+at_commit,same as at-commit,2025,35,0.2046,0.0891,2.3
+logistic,same as at-commit,2025,35,0.2469,0.0891,2.77
+boosted,same as at-commit,2025,35,0.2846,0.0891,3.19
+logistic,all snapshots,2025,35,0.2389,0.0782,3.05
+boosted,all snapshots,2025,35,0.2686,0.0782,3.43
 at_commit,same as at-commit,2026,36,0.2278,0.089,2.56
-logistic,same as at-commit,2026,36,0.2533,0.089,2.85
-boosted,same as at-commit,2026,36,0.3356,0.089,3.77
-logistic,all snapshots,2026,36,0.2433,0.0825,2.95
-boosted,all snapshots,2026,36,0.3111,0.0825,3.77
+logistic,same as at-commit,2026,36,0.2433,0.089,2.73
+boosted,same as at-commit,2026,36,0.3289,0.089,3.7
+logistic,all snapshots,2026,36,0.2322,0.0824,2.82
+boosted,all snapshots,2026,36,0.3022,0.0824,3.67
 at_commit,same as at-commit,2027,0,,,
 logistic,same as at-commit,2027,0,,,
 boosted,same as at-commit,2027,0,,,
-logistic,all snapshots,2027,21,0.2,0.0834,2.4
-boosted,all snapshots,2027,21,0.261,0.0834,3.13
+logistic,all snapshots,2027,21,0.1962,0.0834,2.35
+boosted,all snapshots,2027,21,0.2724,0.0834,3.27

@@ -124,6 +124,12 @@ NUMERIC_FEATURES = [
     # Momentum: coverage in the last two weeks against the pace of the two months before.
     "insider_articles_14d",
     "insider_momentum",
+    # On3/Rivals insiders' dated picks (backfill_predictions.py): as of the snapshot date only. Unknown for
+    # players outside On3's ranked lists; learned from outcomes like everything else, not copied.
+    "on3_picks_other_school",
+    "on3_switched_away",
+    "on3_best_accuracy_other",
+    "on3_max_confidence_other",
 ]
 CATEGORICAL_FEATURES = ["position", "star_bucket", "distance_bucket", "is_in_state_commit", "committed_power_team"]
 FEATURES = NUMERIC_FEATURES + CATEGORICAL_FEATURES
@@ -149,8 +155,17 @@ def build_commitments(recruits: dict, grouped: dict, cutoff: date) -> list[dict]
         if not recruit:
             continue
         class_year = int(key[0])
+        # Two commitments on the same day (Shumaker: Colorado, then back to Ole Miss the same day) can't be
+        # ordered by date; keep the one matching his current commitment and drop the other as ambiguous.
+        by_day: dict[str, list[dict]] = {}
         for event in player_events:
-            if event["event_type"] != "Commitment":
+            if event["event_type"] == "Commitment":
+                by_day.setdefault(event["event_date"], []).append(event)
+        current = norm_team(recruit.get("committed_team", ""))
+        ambiguous = {id(e) for same in by_day.values() if len({norm_team(x["school"]) for x in same}) > 1
+                     for e in same if not (current and (norm_team(e["school"]) == current or norm_team(e["school"]).startswith(current + " ")))}
+        for event in player_events:
+            if event["event_type"] != "Commitment" or id(event) in ambiguous:
                 continue
             start = parse_date(event["event_date"])
             if not start:
@@ -234,7 +249,8 @@ def load_coaching_changes(path: Path, commit_dates: Path, timeline: list[dict]) 
 
 
 INSIDER: dict[str, list[tuple]] = {}   # player id → [(date, flip, firm, prediction, schools, source school, decision, prediction schools)]
-INSIDER_COVERAGE_START = date(2023, 8, 1)   # backfilled On3/Rivals and 247 coverage begins
+INSIDER_COVERAGE_START = date(2022, 8, 1)   # backfilled On3/Rivals and 247 coverage begins
+ON3_PICKS: dict[str, list[dict]] = {}       # 247 player id → On3 insider picks
 
 
 def load_insider_signals(path: Path) -> int:
@@ -248,6 +264,53 @@ def load_insider_signals(path: Path) -> int:
     for rows in INSIDER.values():
         rows.sort()
     return sum(len(v) for v in INSIDER.values())
+
+
+def load_on3_picks(folder: Path) -> int:
+    """On3 insider picks keyed by 247 player id (name + class match), schools in the model's naming."""
+    import json
+    from extract_insider_signals import school_patterns, schools_in
+    if not folder.exists():
+        return 0
+    patterns = school_patterns()
+    to_school = lambda name: (schools_in(name, patterns) or [norm_team(name)])[0] if name else ""
+    ids: dict[tuple[int, str], list[str]] = {}
+    for r in load_csv(Path("data/raw_rankings.csv")):
+        ids.setdefault((int(r["class_year"]), " ".join(r["name"].lower().replace(".", "").split())), []).append(r["player_id"])
+    for path in sorted(folder.glob("on3_picks-*.jsonl")):
+        for line in path.open(encoding="utf-8"):
+            row = json.loads(line)
+            match = ids.get((row["class_year"], " ".join(row["name"].lower().replace(".", "").split())), [])
+            if len(match) != 1:
+                continue
+            ON3_PICKS[match[0]] = [{**pick, "school": to_school(pick["school"]), "flipped_from": to_school(pick["flipped_from"])} for pick in row["picks"]]
+    return len(ON3_PICKS)
+
+
+def picks_as_of(player_id: str, day: date) -> list[dict] | None:
+    """Each insider's pick as it stood on `day`: the current pick if made by then, else the one it replaced."""
+    if player_id not in ON3_PICKS:
+        return None
+    standing = []
+    for pick in ON3_PICKS[player_id]:
+        made = date.fromisoformat(pick["date"]) if pick["date"][:4].isdigit() else None
+        before = date.fromisoformat(pick["previous_date"]) if (pick.get("previous_date") or "")[:4] not in ("", "0001") else None
+        if made and made <= day:
+            standing.append(pick)
+        elif before and before <= day and pick["flipped_from"]:
+            standing.append({**pick, "school": pick["flipped_from"], "flipped_from": "", "confidence": pick.get("previous_confidence")})
+    return standing
+
+
+def on3_features(player_id: str, school_norm: str, day: date) -> dict:
+    standing = picks_as_of(player_id, day)
+    if standing is None:
+        return {"on3_picks_other_school": None, "on3_switched_away": None, "on3_best_accuracy_other": None, "on3_max_confidence_other": None}
+    other = [p for p in standing if p["school"] and not same_school(p["school"], school_norm)]
+    return {"on3_picks_other_school": len(other),
+            "on3_switched_away": sum(1 for p in other if p["flipped_from"] and same_school(p["flipped_from"], school_norm)),
+            "on3_best_accuracy_other": max((float(p["expert_accuracy"] or 0) for p in other), default=0.0),
+            "on3_max_confidence_other": max((float(p["confidence"] or 0) for p in other), default=0.0)}
 
 
 def same_school(a: str, b: str) -> bool:
@@ -403,6 +466,7 @@ def snapshot_rows(commitments: list[dict], cutoff: date, labeled_only: bool) -> 
                 "visited_home_state_school": int(any(str(g.get("is_in_state_commit")) == "yes" for g in visited_geo) and str(geo.get("is_in_state_commit")) != "yes"),
                 **coaching_features(school_norm, start, day),
                 **insider_features(c["key"][1], school_norm, day),
+                **on3_features(c["key"][1], school_norm, day),
                 "school_decommits_last_60_days": len(recent),
                 "school_class_decommits_last_60_days": sum(1 for b in recent if b[1] == class_year),
                 "program_rating_level": level,
@@ -514,7 +578,60 @@ def fit_calibrator(probability: pd.Series, days_to_signing: pd.Series, target: p
     return LogisticRegression(max_iter=2000).fit(calibration_design(probability, days_to_signing), target)
 
 
+# Coverage on a log scale for the blend: "more flip talk, more risk" keeps rising past the most extreme case
+# in the history (the tree model flattens out there — Easton Royal has four times the flip talk of anyone
+# in three years of data).
+BLEND_FEATURES = ["insider_other_school_flip_30d", "insider_flip_talk_30d", "insider_other_school_prediction_90d",
+                  "insider_decision_flip_30d", "insider_articles_30d", "official_visits_elsewhere", "visits_elsewhere_last_30_days"]
+
+
+class Calibrator:
+    """Maps the tree model's raw score to a break rate by stage of the cycle; with blend=True it also weighs
+    coverage counts on a log scale. Fit only on held-out predictions."""
+
+    def __init__(self, blend: bool):
+        self.blend = blend
+        self.model = LogisticRegression(max_iter=4000)
+
+    def design(self, probability: pd.Series, rows: pd.DataFrame) -> pd.DataFrame:
+        design = calibration_design(probability, rows["days_to_signing"])
+        if self.blend:
+            design["coverage_known"] = rows["insider_articles_30d"].notna().astype(float).to_numpy()
+            for name in BLEND_FEATURES:
+                design[f"log_{name}"] = np.log1p(pd.to_numeric(rows[name], errors="coerce").fillna(0).clip(lower=0).to_numpy())
+            design["log_momentum_up"] = np.log1p(pd.to_numeric(rows["insider_momentum"], errors="coerce").fillna(0).clip(lower=0).to_numpy())
+        return design
+
+    def fit(self, probability: pd.Series, rows: pd.DataFrame, target: pd.Series) -> "Calibrator":
+        self.model.fit(self.design(probability, rows), target)
+        return self
+
+    def predict(self, probability: pd.Series, rows: pd.DataFrame) -> np.ndarray:
+        return self.model.predict_proba(self.design(probability, rows))[:, 1]
+
+
+def blend_check(frame: pd.DataFrame, probability: str, target: str) -> tuple[pd.DataFrame, bool]:
+    """Fit on one held-out class, check on the other, with and without the blend. The blend is used only if
+    it ranks better on both checks combined and doesn't cost more than a point of top-25 hit rate."""
+    rows, scores = [], {}
+    for blend in (False, True):
+        aucs, hits = [], []
+        for fit_year, check_year in [(2025, 2026), (2026, 2025)]:
+            fit, check = frame[frame["class_year"] == fit_year], frame[frame["class_year"] == check_year].copy()
+            check["calibrated"] = Calibrator(blend).fit(fit[probability], fit, fit[target]).predict(check[probability], check)
+            auc = float(roc_auc_score(check[target], check["calibrated"]))
+            hit = board_backtest(check.assign(target=check[target]), "calibrated")["top_25_hit_rate"] or 0.0
+            rows.append({"blend": blend, "fit_on": fit_year, "checked_on": check_year, "auc": round(auc, 4), "top_25_hit_rate": hit,
+                         "predicted": round(float(check["calibrated"].mean()), 4), "actual": round(float(check[target].mean()), 4)})
+            aucs.append(auc)
+            hits.append(hit)
+        scores[blend] = (float(np.mean(aucs)), float(np.mean(hits)))
+    use = scores[True][0] > scores[False][0] and scores[True][1] >= scores[False][1] - 0.01
+    return pd.DataFrame(rows), use
+
+
 BOOTSTRAP_MODELS = 6
+BLEND_RESULTS: list[tuple[pd.DataFrame, bool]] = []
 
 
 def bootstrap_range(train: pd.DataFrame, target: str, live: pd.DataFrame, calibrator, full_model_prediction: pd.Series,
@@ -535,7 +652,7 @@ def bootstrap_range(train: pd.DataFrame, target: str, live: pd.DataFrame, calibr
         model = boosted_model()
         model.fit(sample[FEATURES], sample[target], model__sample_weight=weight[weight > 0])
         raw = pd.Series(model.predict_proba(live[FEATURES])[:, 1], index=live.index)
-        predictions.append(calibrator.predict_proba(calibration_design(raw, live["days_to_signing"]))[:, 1])
+        predictions.append(calibrator.predict(raw, live))
     stacked = np.vstack(predictions + [full_model_prediction.to_numpy()])
     return (pd.Series(np.median(stacked, axis=0), index=live.index), pd.Series(np.percentile(stacked, 10, axis=0), index=live.index),
             pd.Series(np.percentile(stacked, 90, axis=0), index=live.index))
@@ -552,10 +669,12 @@ def before_signing_model(all_rows: pd.DataFrame, live: pd.DataFrame) -> tuple[pd
         model = boosted_model()
         model.fit(train[FEATURES], train["target_before_signing"])
         frame.loc[test_index, "before_signing_oos"] = model.predict_proba(frame.loc[test_index, FEATURES])[:, 1]
+    blend_df, use_blend = blend_check(frame, "before_signing_oos", "target_before_signing")
+    blend_df.insert(0, "target", "before signing")
+    BLEND_RESULTS.append((blend_df, use_blend))
     for fit_year, check_year in [(2025, 2026), (2026, 2025)]:
         fit, check = frame[frame["class_year"] == fit_year], frame[frame["class_year"] == check_year].copy()
-        cal = fit_calibrator(fit["before_signing_oos"], fit["days_to_signing"], fit["target_before_signing"])
-        check["calibrated"] = cal.predict_proba(calibration_design(check["before_signing_oos"], check["days_to_signing"]))[:, 1]
+        check["calibrated"] = Calibrator(use_blend).fit(fit["before_signing_oos"], fit, fit["target_before_signing"]).predict(check["before_signing_oos"], check)
         check["stage"] = stage(check["days_to_signing"])
         board = check.assign(target=check["target_before_signing"])
         rows.append({"checked_on": check_year, "stage": "all", "snapshots": len(check),
@@ -567,11 +686,11 @@ def before_signing_model(all_rows: pd.DataFrame, live: pd.DataFrame) -> tuple[pd
                          "auc": round(float(roc_auc_score(group["target_before_signing"], group["before_signing_oos"])), 4) if group["target_before_signing"].nunique() > 1 else None,
                          "calibrated": round(float(group["calibrated"].mean()), 4), "actual": round(float(group["target_before_signing"].mean()), 4)})
     held_out = frame[frame["class_year"].isin(CALIBRATION_CLASSES)]
-    calibrator = fit_calibrator(held_out["before_signing_oos"], held_out["days_to_signing"], held_out["target_before_signing"])
+    calibrator = Calibrator(use_blend).fit(held_out["before_signing_oos"], held_out, held_out["target_before_signing"])
     final = boosted_model()
     final.fit(frame[FEATURES], frame["target_before_signing"])
     raw = pd.Series(final.predict_proba(live[FEATURES])[:, 1], index=live.index)
-    full = pd.Series(calibrator.predict_proba(calibration_design(raw, live["days_to_signing"]))[:, 1], index=live.index)
+    full = pd.Series(calibrator.predict(raw, live), index=live.index)
     probability, live["before_signing_low"], live["before_signing_high"] = bootstrap_range(frame, "target_before_signing", live, calibrator, full)
     return pd.DataFrame(rows), probability, calibrator
 
@@ -588,6 +707,10 @@ def reasons(row: pd.Series) -> str:
         out.append(f"{int(row['power_offers_since_commit'])} power offer(s) since committing")
     if row["higher_rated_same_position_now"] >= 2:
         out.append(f"{int(row['higher_rated_same_position_now'])} higher-rated commits at his position")
+    if pd.notna(row["on3_switched_away"]) and row["on3_switched_away"] >= 1:
+        out.append(f"{int(row['on3_switched_away'])} On3 insider(s) switched their pick away from his school")
+    elif pd.notna(row["on3_picks_other_school"]) and row["on3_picks_other_school"] >= 1:
+        out.append(f"{int(row['on3_picks_other_school'])} On3 insider pick(s) for another school")
     if pd.notna(row["insider_own_site_flip_90d"]) and row["insider_own_site_flip_90d"] >= 1:
         out.append(f"his own school's beat writing about a flip ({int(row['insider_own_site_flip_90d'])} articles, 90 days)")
     if pd.notna(row["insider_decision_flip_30d"]) and row["insider_decision_flip_30d"] >= 1:
@@ -639,6 +762,8 @@ def main() -> int:
                          "event_type": row["event_type"], "event_date": row["event_date"], "school": row["school"], "source": "web report"})
     if web_events:
         print(f"added {len(web_events)} visits/offers from the web reports")
+    picks = load_on3_picks(Path.home() / "Tars" / "reports" / "web_report" / "backfill")
+    print(f"On3 insider picks for {picks:,} players" if picks else "no On3 insider picks yet (backfill_predictions.py)")
     signals = load_insider_signals(args.insider_signals)
     print(f"{signals:,} insider signals loaded" if signals else "no insider signals file; run extract_insider_signals.py")
     changes = load_coaching_changes(args.coaching_changes, args.commit_dates, timeline)
@@ -694,11 +819,13 @@ def main() -> int:
         validation.append({"model": name, "rows": "training data", **metrics(f"train_{first_train['class_year'].min()}_{TEST_YEARS[0] - 1}", first_train["target"], first_train[f"{name}_train_probability"])})
 
     # Recalibration by stage, checked on the class it wasn't fit to (fit 2025 → check 2026, and back).
+    blend_df, use_blend = blend_check(frame, "boosted_probability", "target")
+    blend_df.insert(0, "target", "next 60 days")
+    BLEND_RESULTS.append((blend_df, use_blend))
     stage_rows = []
     for fit_year, check_year in [(2025, 2026), (2026, 2025)]:
         fit, check = frame[frame["class_year"] == fit_year], frame[frame["class_year"] == check_year].copy()
-        calibrator = fit_calibrator(fit["boosted_probability"], fit["days_to_signing"], fit["target"])
-        check["calibrated"] = calibrator.predict_proba(calibration_design(check["boosted_probability"], check["days_to_signing"]))[:, 1]
+        check["calibrated"] = Calibrator(use_blend).fit(fit["boosted_probability"], fit, fit["target"]).predict(check["boosted_probability"], check)
         check["stage"] = stage(check["days_to_signing"])
         for name, group in check.groupby("stage", sort=False):
             stage_rows.append({"fit_on": fit_year, "checked_on": check_year, "stage": name, "snapshots": len(group),
@@ -710,7 +837,7 @@ def main() -> int:
     stage_df = stage_df.sort_values(["fit_on", "stage"])
     stage_df.to_csv(args.out_dir / "flip_snapshot_stage_calibration.csv", index=False)
     held_out = frame[frame["class_year"].isin(CALIBRATION_CLASSES)]
-    calibrator = fit_calibrator(held_out["boosted_probability"], held_out["days_to_signing"], held_out["target"])
+    calibrator = Calibrator(use_blend).fit(held_out["boosted_probability"], held_out, held_out["target"])
 
     validation_df, boards_df, calib_df = pd.DataFrame(validation), pd.DataFrame(boards), pd.DataFrame(calib)
     validation_df.to_csv(args.out_dir / "flip_snapshot_validation.csv", index=False)
@@ -727,7 +854,7 @@ def main() -> int:
     live = live[pd.to_datetime(live["snapshot_date"]).dt.date > cutoff - timedelta(days=GRID_DAYS)]
     live = live[live.apply(lambda r: date.fromisoformat(r["snapshot_date"]) < high_school_cycle_cutoff(int(r["class_year"])), axis=1)]
     live["model_raw_probability"] = final.predict_proba(live[FEATURES])[:, 1].round(4)
-    full = pd.Series(calibrator.predict_proba(calibration_design(live["model_raw_probability"], live["days_to_signing"]))[:, 1], index=live.index)
+    full = pd.Series(calibrator.predict(live["model_raw_probability"], live), index=live.index)
     middle, low, high = bootstrap_range(frame, "target", live, calibrator, full)
     live["break_probability_60d"], live["break_60d_low"], live["break_60d_high"] = middle.round(4), low.round(4), high.round(4)
     print("scoring before-signing risk")
@@ -756,10 +883,15 @@ def main() -> int:
         "## Recalibration by stage of the cycle (fit on one class, checked on the other)", "",
         "The live board's `break_probability_60d` is the raw score recalibrated this way, fit on both classes.", "",
         markdown(stage_df), "",
+        "## Coverage blend (fit on one held-out class, checked on the other)", "",
+        "; ".join(f"{df['target'].iloc[0]}: {'blend used' if used else 'blend not used (no improvement)'}" for df, used in BLEND_RESULTS), "",
+        markdown(pd.concat([df for df, _ in BLEND_RESULTS])) if BLEND_RESULTS else "", "",
         "## Before signing: breaks at any point before the signing period ends", "",
         f"Trained on complete classes only; each checked on a model trained on earlier classes and recalibrated on the other. The live board's `break_before_signing` uses all of them. Ranges (`*_low`/`*_high`) are the 10th-90th percentile of {BOOTSTRAP_MODELS} models trained on resampled commitments.", "",
         markdown(before_df), "",
     ]
+    if BLEND_RESULTS:
+        pd.concat([df for df, _ in BLEND_RESULTS]).to_csv(args.out_dir / "flip_snapshot_blend_check.csv", index=False)
     (args.out_dir / "flip_snapshot_summary.md").write_text("\n".join(summary) + "\n", encoding="utf-8")
     print("\n".join(summary))
     return 0

@@ -45,7 +45,7 @@ from build_flip_boards import POWER_TEAMS
 from geography_features import geography_features
 from score_commitment_strength import dedupe_commits, in_high_school_cycle, load_csv, norm_team, parse_date, rating_float
 from train_flip_snapshot_model import (INSIDER, INSIDER_COVERAGE_START, GRID_DAYS, build_commitments, crowding_index, grid_dates,
-                                       load_insider_signals, program_levels)
+                                       load_insider_signals, load_on3_picks, picks_as_of, program_levels)
 
 LOOKBACK_DAYS = 120
 TEST_YEARS = [2025, 2026]
@@ -58,6 +58,7 @@ CANDIDATE_NUMERIC = [
     "miles_from_home", "miles_closer_than_committed", "program_level", "rating_above_program",
     "position_commits_there_now", "candidates", "visit_recency_rank",
     "insider_flip_mentions_90d", "insider_prediction_mentions_90d", "insider_national_mentions_90d", "insider_pursuer_site_mentions_90d",
+    "on3_picks_for_school",
 ]
 CANDIDATE_CATEGORICAL = ["in_state", "power_program", "star_bucket"]
 CANDIDATE_FEATURES = CANDIDATE_NUMERIC + CANDIDATE_CATEGORICAL
@@ -91,6 +92,7 @@ def candidate_rows(c: dict, day: date, geo_cache: dict, levels: dict, crowd: dic
     visited = sorted((d, s) for s, d in last_visit.items() if d)
     recency_rank = {s: rank for rank, (_, s) in enumerate(reversed(visited), 1)}
     covered = bool(INSIDER) and day >= INSIDER_COVERAGE_START + timedelta(days=30)
+    standing = picks_as_of(c["key"][1], day)
     talk = [r for r in INSIDER.get(c["key"][1], []) if day - timedelta(days=90) < r[0] <= day] if covered else []
     rows = []
     for s, ev in by_school.items():
@@ -124,6 +126,8 @@ def candidate_rows(c: dict, day: date, geo_cache: dict, levels: dict, crowd: dic
             # National coverage naming this school with flip talk, and this school's own beat writing about him.
             "insider_national_mentions_90d": sum(1 for r in talk if r[1] and r[5] == "national" and s in r[4]) if covered else None,
             "insider_pursuer_site_mentions_90d": sum(1 for r in talk if r[1] and r[5] == s) if covered else None,
+            # On3 insiders whose pick, as of this date, is this school.
+            "on3_picks_for_school": sum(1 for pick in standing if pick["school"] == s) if standing is not None else None,
             "in_state": str(g.get("is_in_state_commit", "")),
             "power_program": "yes" if s in POWER_TEAMS else "no",
             "star_bucket": recruit.get("star_bucket", ""),
@@ -222,6 +226,7 @@ def main() -> int:
                      for r in load_csv(args.extra_events) if r.get("counted") == "yes" and in_high_school_cycle(r)]
     cutoff = max(parse_date(r["event_date"]) or date.min for r in timeline if r["event_type"] == "Decommit")
     load_insider_signals(Path("data/insider_signals.csv"))
+    load_on3_picks(Path.home() / "Tars" / "reports" / "web_report" / "backfill")
     commitments = build_commitments(recruits, events_by_player(timeline), cutoff)
 
     frame, snapshots = build_training(commitments, cutoff)
@@ -297,6 +302,8 @@ def main() -> int:
             parts.append(f"{int(r.miles_closer_than_committed)} miles closer to home")
         if r.earlier_commitment:
             parts.append("was committed there before")
+        if pd.notna(r.on3_picks_for_school) and r.on3_picks_for_school:
+            parts.append(f"{int(r.on3_picks_for_school)} On3 insider pick(s)")
         if pd.notna(r.insider_prediction_mentions_90d) and r.insider_prediction_mentions_90d:
             parts.append(f"insiders favor/predict ({int(r.insider_prediction_mentions_90d)} mentions)")
         elif pd.notna(r.insider_flip_mentions_90d) and r.insider_flip_mentions_90d:
