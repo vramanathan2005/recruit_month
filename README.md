@@ -317,8 +317,22 @@ against — and coacheshotseat.com blocks automated access.)
 ```
 
 When an On3 insider has switched his pick away from a player's school, the tree underrates it (it can't learn
-from a few dozen cases), so a small Bayesian layer multiplies the tree's odds: about x5.6 for a switch under 45
-days old, x1.9 for an older one (a player still committed six weeks after insiders switch usually holds). Each
+from a few dozen cases), so a small Bayesian layer multiplies the tree's odds: about x5.9 for a switch under 45
+days old, x2.0 for an older one (a player still committed six weeks after insiders switch usually holds). Each
 multiplier is learned as a range from 2024-26 and the old one borrows from the fresh one. Players without a
 switch keep the tree's number. Checked by learning from two classes and testing on the third: ranking and the
 weekly top-25 hit rate equal or better in all three.
+
+### Tars Recruiting tab
+
+```bash
+.venv/bin/python export_for_tars.py --local   # into Tars's local dev storage (npm run dev in ~/Tars)
+.venv/bin/python export_for_tars.py           # into the live site's storage
+```
+
+Run after the models. It writes the live flip board, every ranked 2027-28 recruit's profile (flip outlook in
+plain English, 247 timeline plus web-report visits, On3 insider picks, coverage headlines) and a search index
+to Tars's `tars-prebuilt` Workers KV namespace, which the Recruiting tab reads. The upload holds
+subscription-derived coverage, so it only goes to KV behind the Tars login; the files it builds stay in the
+gitignored `data/cache/tars`. School names and logos come from ESPN's team list (`data/espn_teams.json`), which
+`norm_team` also uses to strip every mascot (so "Nebraska" and "Nebraska Cornhuskers" are one school).

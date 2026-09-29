@@ -7,8 +7,8 @@
 | Tier | Count |
 | --- | ---: |
 | Strong | 4820 |
-| Stable / Monitor | 9150 |
-| Vulnerable | 5457 |
+| Stable / Monitor | 9154 |
+| Vulnerable | 5453 |
 | Weak / Attack | 677 |
 
 | Class | Recruits |

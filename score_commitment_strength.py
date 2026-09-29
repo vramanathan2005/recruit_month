@@ -11,8 +11,11 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
+import re
 from collections import Counter, defaultdict
 from datetime import date, datetime
+from functools import lru_cache
 from pathlib import Path
 
 from geography_features import geography_features
@@ -58,9 +61,20 @@ def clamp(value: float, low: float = 0.0, high: float = 100.0) -> float:
     return max(low, min(high, value))
 
 
-def norm_team(value: str) -> str:
-    value = " ".join((value or "").lower().replace("&amp;", "&").split())
-    suffixes = (
+# Visit text 247 sometimes appends to a school ("Tennessee Volunteers for spring game", "... (March 27-28)").
+VISIT_TEXT = [re.compile(p) for p in (r"\s*\(.*$", r"\s+for\s+.*$", r"\s*\.\.\.\s*more$", r"\s+spring game$")]
+# Short forms different sources use for the same school.
+SCHOOL_ALIASES = {"brigham young": "byu", "connecticut": "uconn", "usf": "south florida", "middle tennessee state": "middle tennessee",
+                  "sam houston state": "sam houston", "nicholls state": "nicholls", "southern mississippi": "southern miss",
+                  "miami (fl)": "miami", "miami fl": "miami", "texas-rio grande valley": "utrgv", "massachusetts": "umass",
+                  "mcneese state": "mcneese", "lindenwood university": "lindenwood", "houston baptist": "houston christian", "cal": "california",
+                  "long island": "liu", "southern university": "southern", "texas a&m commerce": "east texas a&m", "florida international": "fiu"}
+
+
+@lru_cache(maxsize=None)
+def team_suffixes() -> tuple[str, ...]:
+    """Mascots to strip, longest first ("golden bears" before "bears"): the hand list plus ESPN's full list."""
+    hand = (
         " tigers",
         " wildcats",
         " bulldogs",
@@ -115,11 +129,28 @@ def norm_team(value: str) -> str:
         " scarlet knights",
         " hoosiers",
         " fighting illini",
+        " golden panthers",
+        " fightin' blue hens",
+        " fighting maroon",
+        " battlin' bears",
+        " rainbow warriors",
     )
-    for suffix in suffixes:
-        if value.endswith(suffix):
-            return value[: -len(suffix)]
-    return value
+    espn = Path(__file__).resolve().parent / "data" / "espn_teams.json"
+    extra = tuple(" " + t["mascot"].lower() for t in json.loads(espn.read_text()) if t["mascot"]) if espn.exists() else ()
+    return tuple(sorted(set(hand) | set(extra), key=len, reverse=True))
+
+
+@lru_cache(maxsize=None)
+def norm_team(value: str) -> str:
+    value = " ".join((value or "").lower().replace("&amp;", "&").replace("\u2019", "'").split())
+    value = re.sub(r"\((oh|pa)\)", r"\1", value)          # Miami (OH) is its own school, not Miami
+    for pattern in VISIT_TEXT:
+        value = pattern.sub("", value)
+    for suffix in team_suffixes():
+        if value.endswith(suffix) and len(value) > len(suffix):
+            value = value[: -len(suffix)]
+            break
+    return SCHOOL_ALIASES.get(value, value)
 
 
 def load_csv(path: Path) -> list[dict[str, str]]:

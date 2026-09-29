@@ -363,10 +363,11 @@ def main() -> int:
         return "; ".join(parts)
 
     acronyms = {"lsu", "tcu", "ucf", "smu", "usc", "ucla", "byu", "unlv", "utsa", "utep", "uab", "fiu", "fau", "usf", "uconn", "umass", "nc state"}
+    live["school_key"], live["player_id"] = live["school"], live["snapshot_id"].str.split("|").str[1]
     live["school"] = live["school"].map(lambda s: s.upper() if s in acronyms else " ".join(w.upper() if w in acronyms else w.capitalize() for w in s.split()))
     live["why"] = live.apply(why, axis=1)
     live = live.sort_values(["break_before_signing", "snapshot_id", "if_he_flips"], ascending=[False, True, False])
-    out = live[["class_year", "name", "position", "committed_school", "break_before_signing", "school", "if_he_flips", "flip_to_school", "why"]].copy()
+    out = live[["class_year", "player_id", "name", "position", "committed_school", "break_before_signing", "school", "school_key", "if_he_flips", "flip_to_school", "why"]].copy()
     out[["if_he_flips", "flip_to_school"]] = out[["if_he_flips", "flip_to_school"]].round(4)
     out.to_csv(args.out_dir / "flip_boards" / "live_flip_destinations.csv", index=False)
 
@@ -377,6 +378,8 @@ def main() -> int:
     board["snapshot_id"] = board["class_year"].astype(str) + "|" + board["player_id"].astype(str) + "|" + board["commitment_date"]
     board["likely_destinations"] = board["snapshot_id"].map(top).fillna("") + board["snapshot_id"].map(
         lambda s: f"; not on his radar yet {radar.get(s, 1.0):.0%}" if s in radar.index else "not on his radar yet 100%")
+    board["not_on_radar_if_flips"] = board["snapshot_id"].map(lambda s: round(float(radar.get(s, 1.0)), 4))
+    board["goes_elsewhere_after_break"] = round(goes_elsewhere, 4)
     board.drop(columns="snapshot_id").to_csv(args.board, index=False)
     print(f"goes to another school after a break: {goes_elsewhere:.1%}; wrote {len(out):,} live candidate rows")
     return 0
