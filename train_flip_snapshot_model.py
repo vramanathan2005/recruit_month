@@ -113,6 +113,17 @@ NUMERIC_FEATURES = [
     "insider_firm_talk_30d",
     "insider_other_school_flip_30d",
     "insider_other_school_prediction_90d",
+    # Who's saying it: his own school's beat worrying about a flip is a different signal from a rival
+    # school's site hoping for one, or national coverage.
+    "insider_own_site_flip_90d",
+    "insider_national_flip_30d",
+    "insider_rival_site_flip_30d",
+    # A decision coming soon, and whether it comes with flip talk.
+    "insider_decision_talk_30d",
+    "insider_decision_flip_30d",
+    # Momentum: coverage in the last two weeks against the pace of the two months before.
+    "insider_articles_14d",
+    "insider_momentum",
 ]
 CATEGORICAL_FEATURES = ["position", "star_bucket", "distance_bucket", "is_in_state_commit", "committed_power_team"]
 FEATURES = NUMERIC_FEATURES + CATEGORICAL_FEATURES
@@ -222,8 +233,8 @@ def load_coaching_changes(path: Path, commit_dates: Path, timeline: list[dict]) 
     return sum(len(v) for v in COACHING.values())
 
 
-INSIDER: dict[str, list[tuple]] = {}   # player id → [(date, flip, firm, prediction, schools)], sorted
-INSIDER_COVERAGE_START = date(2024, 8, 1)
+INSIDER: dict[str, list[tuple]] = {}   # player id → [(date, flip, firm, prediction, schools, source school, decision, prediction schools)]
+INSIDER_COVERAGE_START = date(2023, 8, 1)   # backfilled On3/Rivals and 247 coverage begins
 
 
 def load_insider_signals(path: Path) -> int:
@@ -231,26 +242,43 @@ def load_insider_signals(path: Path) -> int:
         return 0
     for row in load_csv(path):
         INSIDER.setdefault(row["player_id"], []).append((date.fromisoformat(row["date"]), int(row["flip_talk"]), int(row["firm_talk"]),
-                                                          int(row["prediction_talk"]), tuple(s for s in row["schools"].split("|") if s)))
+                                                          int(row["prediction_talk"]), tuple(s for s in row["schools"].split("|") if s),
+                                                          row.get("source_school", "unknown"), int(row.get("decision_talk") or 0),
+                                                          tuple(s for s in (row.get("prediction_schools") or "").split("|") if s)))
     for rows in INSIDER.values():
         rows.sort()
     return sum(len(v) for v in INSIDER.values())
 
 
+def same_school(a: str, b: str) -> bool:
+    return bool(a and b) and (a == b or a.startswith(b + " ") or b.startswith(a + " "))
+
+
 def insider_features(player_id: str, school_norm: str, day: date) -> dict:
-    names = ["insider_articles_30d", "insider_flip_talk_30d", "insider_flip_talk_90d", "insider_firm_talk_30d",
-             "insider_other_school_flip_30d", "insider_other_school_prediction_90d"]
+    names = [n for n in NUMERIC_FEATURES if n.startswith("insider_")]
     if not INSIDER or day < INSIDER_COVERAGE_START + timedelta(days=30):
         return dict.fromkeys(names)
     rows = [r for r in INSIDER.get(player_id, []) if day - timedelta(days=90) < r[0] <= day]
     recent = [r for r in rows if r[0] > day - timedelta(days=30)]
-    others = lambda r: any(s != school_norm and not school_norm.startswith(s + " ") and not s.startswith(school_norm + " ") for s in r[4])
+    last14 = sum(1 for r in rows if r[0] > day - timedelta(days=14))
+    prior60 = sum(1 for r in INSIDER.get(player_id, []) if day - timedelta(days=74) < r[0] <= day - timedelta(days=14))
+    other = lambda schools: any(not same_school(s, school_norm) for s in schools)
+    national = lambda r: r[5] == "national"
+    own = lambda r: same_school(r[5], school_norm)
+    rival = lambda r: r[5] not in ("national", "unknown") and not own(r)
     return {"insider_articles_30d": len(recent),
             "insider_flip_talk_30d": sum(r[1] for r in recent),
             "insider_flip_talk_90d": sum(r[1] for r in rows),
             "insider_firm_talk_30d": sum(r[2] for r in recent),
-            "insider_other_school_flip_30d": sum(1 for r in recent if r[1] and others(r)),
-            "insider_other_school_prediction_90d": sum(1 for r in rows if r[3] and others(r))}
+            "insider_other_school_flip_30d": sum(1 for r in recent if r[1] and other(r[4])),
+            "insider_other_school_prediction_90d": sum(1 for r in rows if other(r[7])),
+            "insider_own_site_flip_90d": sum(1 for r in rows if r[1] and own(r)),
+            "insider_national_flip_30d": sum(1 for r in recent if r[1] and national(r)),
+            "insider_rival_site_flip_30d": sum(1 for r in recent if r[1] and rival(r)),
+            "insider_decision_talk_30d": sum(r[6] for r in recent),
+            "insider_decision_flip_30d": sum(1 for r in recent if r[6] and r[1]),
+            "insider_articles_14d": last14,
+            "insider_momentum": round(last14 - prior60 * 14 / 60, 2)}
 
 
 def coaching_features(school_norm: str, start: date, day: date) -> dict:
@@ -560,6 +588,10 @@ def reasons(row: pd.Series) -> str:
         out.append(f"{int(row['power_offers_since_commit'])} power offer(s) since committing")
     if row["higher_rated_same_position_now"] >= 2:
         out.append(f"{int(row['higher_rated_same_position_now'])} higher-rated commits at his position")
+    if pd.notna(row["insider_own_site_flip_90d"]) and row["insider_own_site_flip_90d"] >= 1:
+        out.append(f"his own school's beat writing about a flip ({int(row['insider_own_site_flip_90d'])} articles, 90 days)")
+    if pd.notna(row["insider_decision_flip_30d"]) and row["insider_decision_flip_30d"] >= 1:
+        out.append("decision talk alongside flip talk (30 days)")
     if pd.notna(row["insider_other_school_prediction_90d"]) and row["insider_other_school_prediction_90d"] >= 1:
         out.append(f"insiders predicting/favoring another school ({int(row['insider_other_school_prediction_90d'])} mentions, 90 days)")
     elif pd.notna(row["insider_flip_talk_30d"]) and row["insider_flip_talk_30d"] >= 2:

@@ -33,8 +33,15 @@ FLIP = re.compile(r"\b(flip(s|ped|ping)?|flip watch|decommit\w*|re-?open\w* (his
 FIRM = re.compile(r"\b(reaffirm\w*|locked in|lock(s|ed)? (it )?(up|down)|shut(s|ting)? (it|things|his recruitment) down|remains? (firmly )?committed|"
                   r"solid( commit\w*)?|firm(ly)? (committed|in)|holds? (on|onto)|hang(s|ing)? on to|not going anywhere|all[- ]in|"
                   r"signs?|signed|inks?|early enroll\w*|doubl(es|ed|ing) down)\b", re.I)
-PREDICT = re.compile(r"\b(prediction machine|rpm|crystal ball|futurecast|predict\w*|smart money|the favorite|favorite to|favou?rs?|"
-                     r"(team|school) to beat|front-?runner|leader|lean\w*|expected to (flip|land|choose|pick|commit))\b", re.I)
+# Clear prediction phrases only ("leader" or "favorite" on their own too often mean something else).
+PREDICT = re.compile(r"\b(prediction machine|rpm|crystal ball|futurecast|predict\w*|smart money|(team|school) to beat|front-?runner|"
+                     r"favou?rite to (land|flip|win|get)|expected to (flip|land|choose|pick|commit)|trending (toward|towards|to)|"
+                     r"lean(s|ing)? (toward|towards|to)|in the driver'?s seat|pulling (it|the flip) off)\b", re.I)
+# A decision coming soon — alongside flip talk, the difference between noise and a real flip.
+DECISION = re.compile(r"\b(close to a decision|(nearing|nears) (a|his) (final )?decision|decision (is )?(coming|soon|near|imminent|date)|"
+                      r"(set|plans?|expected) to (announce|decide|make)|announce\w*|final (visit|decision)|down to (two|three|\d)|"
+                      r"narrow\w* (it|his list|things)|commitment date|decision day|in the next (few )?(days|weeks))\b", re.I)
+REGISTRY = TARS / "reports" / "web_report" / "config" / "source_registry.csv"
 
 
 def school_patterns() -> tuple[re.Pattern, dict[str, str]]:
@@ -73,6 +80,26 @@ def schools_in(text: str, patterns) -> list[str]:
     return found
 
 
+def site_schools(names: dict[str, str]) -> dict[str, str]:
+    """Site name → the school whose beat it covers (as the model names it), or "national"."""
+    out = {"247Sports national": "national"}
+    for row in csv.DictReader(REGISTRY.open(encoding="utf-8")):
+        school = row["school"].strip()
+        out[row["source_name"]] = "national" if school.lower() == "national" else names.get(school.lower(), school.lower())
+    return out
+
+
+def prediction_schools(text: str, patterns) -> list[str]:
+    """Schools named in the same sentence as a prediction phrase."""
+    found = []
+    for sentence in re.split(r"(?<=[.!?”\"])\s+", text):
+        if PREDICT.search(sentence):
+            for school in schools_in(sentence, patterns):
+                if school not in found:
+                    found.append(school)
+    return found
+
+
 def norm_name(value: str) -> str:
     value = re.sub(r"[^a-z ]", " ", (value or "").lower().replace("'", "").replace("’", ""))
     return " ".join(w for w in value.split() if w not in {"jr", "sr", "ii", "iii", "iv"})
@@ -86,6 +113,7 @@ def sentences_about(paragraphs: list[str], name: str) -> str:
 
 def main() -> int:
     patterns = school_patterns()
+    sites = site_schools(patterns[1])
     players = {}
     for r in csv.DictReader(Path("data/raw_rankings.csv").open(encoding="utf-8")):
         players[(r["class_year"], norm_name(r["name"]))] = r["player_id"]
@@ -104,8 +132,11 @@ def main() -> int:
         flip, firm, predict = bool(FLIP.search(text)), bool(FIRM.search(text)), bool(PREDICT.search(text))
         schools = schools_in(text, patterns)
         rows.append({"date": date, "class_year": year, "player_id": pid, "name": name, "source": source, "kind": kind,
+                     "source_school": sites.get(source, "unknown"),
                      "flip_talk": int(flip), "firm_talk": int(firm), "prediction_talk": int(predict),
-                     "schools": "|".join(schools), "url": url})
+                     "decision_talk": int(bool(DECISION.search(text))),
+                     "schools": "|".join(schools), "prediction_schools": "|".join(prediction_schools(text, patterns) if predict else []),
+                     "url": url})
         sources[kind] += 1
 
     for path in sorted(BACKFILL.glob("listings*.jsonl")):
@@ -133,7 +164,8 @@ def main() -> int:
         writer.writerows(rows)
     print(f"{len(rows):,} (article, prospect) signals from {dict(sources)}; "
           f"flip talk {sum(r['flip_talk'] for r in rows):,}, firm talk {sum(r['firm_talk'] for r in rows):,}, "
-          f"prediction talk {sum(r['prediction_talk'] for r in rows):,} → {OUT}")
+          f"prediction talk {sum(r['prediction_talk'] for r in rows):,}, decision talk {sum(r['decision_talk'] for r in rows):,}; "
+          f"sources: {Counter(r['source_school'] if r['source_school'] in ('national', 'unknown') else 'team site' for r in rows)} → {OUT}")
     return 0
 
 

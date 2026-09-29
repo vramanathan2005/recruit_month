@@ -57,7 +57,7 @@ CANDIDATE_NUMERIC = [
     "unofficial_visits_since_commit", "visits_total", "days_since_last_visit", "earlier_commitment",
     "miles_from_home", "miles_closer_than_committed", "program_level", "rating_above_program",
     "position_commits_there_now", "candidates", "visit_recency_rank",
-    "insider_flip_mentions_90d", "insider_prediction_mentions_90d",
+    "insider_flip_mentions_90d", "insider_prediction_mentions_90d", "insider_national_mentions_90d", "insider_pursuer_site_mentions_90d",
 ]
 CANDIDATE_CATEGORICAL = ["in_state", "power_program", "star_bucket"]
 CANDIDATE_FEATURES = CANDIDATE_NUMERIC + CANDIDATE_CATEGORICAL
@@ -120,7 +120,10 @@ def candidate_rows(c: dict, day: date, geo_cache: dict, levels: dict, crowd: dic
             "visit_recency_rank": recency_rank.get(s, NEVER),
             # Coverage naming this school alongside flip talk or a prediction ("smart money is on the Tigers").
             "insider_flip_mentions_90d": sum(1 for r in talk if r[1] and s in r[4]) if covered else None,
-            "insider_prediction_mentions_90d": sum(1 for r in talk if r[3] and s in r[4]) if covered else None,
+            "insider_prediction_mentions_90d": sum(1 for r in talk if s in r[7]) if covered else None,
+            # National coverage naming this school with flip talk, and this school's own beat writing about him.
+            "insider_national_mentions_90d": sum(1 for r in talk if r[1] and r[5] == "national" and s in r[4]) if covered else None,
+            "insider_pursuer_site_mentions_90d": sum(1 for r in talk if r[1] and r[5] == s) if covered else None,
             "in_state": str(g.get("is_in_state_commit", "")),
             "power_program": "yes" if s in POWER_TEAMS else "no",
             "star_bucket": recruit.get("star_bucket", ""),
