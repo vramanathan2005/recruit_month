@@ -290,16 +290,19 @@ def build() -> list[dict]:
                         texas = entry
             not_recruiting = float(lv.get("not_on_radar_if_flips") or 0)
             shown = sum(d["ifFlips"] for d in destinations)
+            # A player who decommits and re-commits to the same school counts as staying: every chance shown is
+            # "ends up somewhere else" (the model's decommit chance x the share of decommits that don't come back).
+            elsewhere = lambda x: round(float(x) * ge, 4) if x == x and x is not None else None
             flip = {
-                "chance": round(p, 4), "low": num(lv["before_signing_low"]), "high": num(lv["before_signing_high"]),
-                "chance60": num(lv["break_probability_60d"]), "label": stability(p),
+                "chance": round(leaves, 4), "low": elsewhere(lv["before_signing_low"]), "high": elsewhere(lv["before_signing_high"]),
+                "chance60": elsewhere(lv["break_probability_60d"]), "label": stability(leaves), "decommitChance": round(p, 4),
                 "rankInClass": int(rank_of.get(pid, 0)), "classSize": int(class_size.get(int(base["class_year"]), 0)),
                 "stays": round(1 - leaves, 4), "leaves": round(leaves, 4),
                 "destinations": destinations, "otherSchools": round(max(0.0, 1 - shown - not_recruiting) * leaves, 4),
                 "notRecruitingYet": round(not_recruiting * leaves, 4), "texas": texas,
                 "reasons": risk_reasons(lv.get("why"), name),
                 "insiderNote": insider_note(lv.get("insider_switch_adjusted"), name),
-                "withoutInsiderSwitch": num(lv.get("tree_before_signing")) if isinstance(lv.get("insider_switch_adjusted"), str) else None,
+                "withoutInsiderSwitch": elsewhere(lv.get("tree_before_signing")) if isinstance(lv.get("insider_switch_adjusted"), str) else None,
                 "daysCommitted": num(lv.get("days_committed")), "daysToSigning": num(lv.get("days_to_signing")),
                 "asOf": str(lv["snapshot_date"]),
             }
