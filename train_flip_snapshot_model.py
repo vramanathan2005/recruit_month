@@ -105,6 +105,14 @@ NUMERIC_FEATURES = [
     # His school's head coach fired or gone (data/coaching_changes.csv, from fetch_coaching_changes.py).
     "coach_change_since_commit",
     "days_since_coach_change",
+    # Insider coverage (extract_insider_signals.py over the backfilled On3/Rivals coverage and the web reports).
+    # Unknown (not zero) before coverage starts, so "no talk" in years with no coverage isn't read as "quiet".
+    "insider_articles_30d",
+    "insider_flip_talk_30d",
+    "insider_flip_talk_90d",
+    "insider_firm_talk_30d",
+    "insider_other_school_flip_30d",
+    "insider_other_school_prediction_90d",
 ]
 CATEGORICAL_FEATURES = ["position", "star_bucket", "distance_bucket", "is_in_state_commit", "committed_power_team"]
 FEATURES = NUMERIC_FEATURES + CATEGORICAL_FEATURES
@@ -212,6 +220,37 @@ def load_coaching_changes(path: Path, commit_dates: Path, timeline: list[dict]) 
     for key in COACHING:
         COACHING[key].sort()
     return sum(len(v) for v in COACHING.values())
+
+
+INSIDER: dict[str, list[tuple]] = {}   # player id → [(date, flip, firm, prediction, schools)], sorted
+INSIDER_COVERAGE_START = date(2024, 8, 1)
+
+
+def load_insider_signals(path: Path) -> int:
+    if not path.exists():
+        return 0
+    for row in load_csv(path):
+        INSIDER.setdefault(row["player_id"], []).append((date.fromisoformat(row["date"]), int(row["flip_talk"]), int(row["firm_talk"]),
+                                                          int(row["prediction_talk"]), tuple(s for s in row["schools"].split("|") if s)))
+    for rows in INSIDER.values():
+        rows.sort()
+    return sum(len(v) for v in INSIDER.values())
+
+
+def insider_features(player_id: str, school_norm: str, day: date) -> dict:
+    names = ["insider_articles_30d", "insider_flip_talk_30d", "insider_flip_talk_90d", "insider_firm_talk_30d",
+             "insider_other_school_flip_30d", "insider_other_school_prediction_90d"]
+    if not INSIDER or day < INSIDER_COVERAGE_START + timedelta(days=30):
+        return dict.fromkeys(names)
+    rows = [r for r in INSIDER.get(player_id, []) if day - timedelta(days=90) < r[0] <= day]
+    recent = [r for r in rows if r[0] > day - timedelta(days=30)]
+    others = lambda r: any(s != school_norm and not school_norm.startswith(s + " ") and not s.startswith(school_norm + " ") for s in r[4])
+    return {"insider_articles_30d": len(recent),
+            "insider_flip_talk_30d": sum(r[1] for r in recent),
+            "insider_flip_talk_90d": sum(r[1] for r in rows),
+            "insider_firm_talk_30d": sum(r[2] for r in recent),
+            "insider_other_school_flip_30d": sum(1 for r in recent if r[1] and others(r)),
+            "insider_other_school_prediction_90d": sum(1 for r in rows if r[3] and others(r))}
 
 
 def coaching_features(school_norm: str, start: date, day: date) -> dict:
@@ -335,6 +374,7 @@ def snapshot_rows(commitments: list[dict], cutoff: date, labeled_only: bool) -> 
                 "most_visits_to_one_other_school": max((sum(1 for _, s in visits_elsewhere if s == school) for school in {s for _, s in visits_elsewhere}), default=0),
                 "visited_home_state_school": int(any(str(g.get("is_in_state_commit")) == "yes" for g in visited_geo) and str(geo.get("is_in_state_commit")) != "yes"),
                 **coaching_features(school_norm, start, day),
+                **insider_features(c["key"][1], school_norm, day),
                 "school_decommits_last_60_days": len(recent),
                 "school_class_decommits_last_60_days": sum(1 for b in recent if b[1] == class_year),
                 "program_rating_level": level,
@@ -520,6 +560,10 @@ def reasons(row: pd.Series) -> str:
         out.append(f"{int(row['power_offers_since_commit'])} power offer(s) since committing")
     if row["higher_rated_same_position_now"] >= 2:
         out.append(f"{int(row['higher_rated_same_position_now'])} higher-rated commits at his position")
+    if pd.notna(row["insider_other_school_prediction_90d"]) and row["insider_other_school_prediction_90d"] >= 1:
+        out.append(f"insiders predicting/favoring another school ({int(row['insider_other_school_prediction_90d'])} mentions, 90 days)")
+    elif pd.notna(row["insider_flip_talk_30d"]) and row["insider_flip_talk_30d"] >= 2:
+        out.append(f"flip talk in coverage ({int(row['insider_flip_talk_30d'])} articles, 30 days)")
     if row["coach_change_since_commit"]:
         out.append(f"his school's head coach left or was fired {int(row['days_since_coach_change'])} days ago")
     if row["most_visits_to_one_other_school"] >= 2:
@@ -549,6 +593,7 @@ def main() -> int:
     parser.add_argument("--out-dir", type=Path, default=Path("data"))
     parser.add_argument("--cutoff", help="data cutoff (YYYY-MM-DD); default: the last decommit in the timeline")
     parser.add_argument("--coaching-changes", type=Path, default=Path("data/coaching_changes.csv"))
+    parser.add_argument("--insider-signals", type=Path, default=Path("data/insider_signals.csv"))
     parser.add_argument("--commit-dates", type=Path, default=Path("data/commit_dates.csv"))
     parser.add_argument("--extra-events", type=Path, default=Path("data/web_report_events.csv"),
                         help="visits/offers from the web reports (extract_web_report_events.py); rows with counted=yes are added to the timeline")
@@ -562,6 +607,8 @@ def main() -> int:
                          "event_type": row["event_type"], "event_date": row["event_date"], "school": row["school"], "source": "web report"})
     if web_events:
         print(f"added {len(web_events)} visits/offers from the web reports")
+    signals = load_insider_signals(args.insider_signals)
+    print(f"{signals:,} insider signals loaded" if signals else "no insider signals file; run extract_insider_signals.py")
     changes = load_coaching_changes(args.coaching_changes, args.commit_dates, timeline)
     print(f"{changes} head coaching changes loaded" if changes else "no coaching changes file; run fetch_coaching_changes.py")
     cutoff = date.fromisoformat(args.cutoff) if args.cutoff else max(parse_date(r["event_date"]) or date.min for r in timeline if r["event_type"] == "Decommit")

@@ -5,3 +5,12 @@ __pycache__/
 # Excerpts from the Tars web reports: rebuilt locally by extract_web_report_events.py, not published.
 data/web_report_events.csv
 data/scrape_refresh.log
+
+# Recruits' X activity: local only, never published.
+data/x_*
+
+# Signals derived from paywalled coverage: local only
+data/insider_signals.csv
+
+# Disabled X collectors (reference UC Report internals): local only
+x_activity_*.py

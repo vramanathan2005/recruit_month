@@ -44,7 +44,8 @@ from backtest_commitment_strength import events_by_player
 from build_flip_boards import POWER_TEAMS
 from geography_features import geography_features
 from score_commitment_strength import dedupe_commits, in_high_school_cycle, load_csv, norm_team, parse_date, rating_float
-from train_flip_snapshot_model import GRID_DAYS, build_commitments, crowding_index, grid_dates, program_levels
+from train_flip_snapshot_model import (INSIDER, INSIDER_COVERAGE_START, GRID_DAYS, build_commitments, crowding_index, grid_dates,
+                                       load_insider_signals, program_levels)
 
 LOOKBACK_DAYS = 120
 TEST_YEARS = [2025, 2026]
@@ -56,6 +57,7 @@ CANDIDATE_NUMERIC = [
     "unofficial_visits_since_commit", "visits_total", "days_since_last_visit", "earlier_commitment",
     "miles_from_home", "miles_closer_than_committed", "program_level", "rating_above_program",
     "position_commits_there_now", "candidates", "visit_recency_rank",
+    "insider_flip_mentions_90d", "insider_prediction_mentions_90d",
 ]
 CANDIDATE_CATEGORICAL = ["in_state", "power_program", "star_bucket"]
 CANDIDATE_FEATURES = CANDIDATE_NUMERIC + CANDIDATE_CATEGORICAL
@@ -88,6 +90,8 @@ def candidate_rows(c: dict, day: date, geo_cache: dict, levels: dict, crowd: dic
     last_visit = {s: max((d for d, t in ev if "Visit" in t), default=None) for s, ev in by_school.items()}
     visited = sorted((d, s) for s, d in last_visit.items() if d)
     recency_rank = {s: rank for rank, (_, s) in enumerate(reversed(visited), 1)}
+    covered = bool(INSIDER) and day >= INSIDER_COVERAGE_START + timedelta(days=30)
+    talk = [r for r in INSIDER.get(c["key"][1], []) if day - timedelta(days=90) < r[0] <= day] if covered else []
     rows = []
     for s, ev in by_school.items():
         if (home_key, s) not in geo_cache:
@@ -114,6 +118,9 @@ def candidate_rows(c: dict, day: date, geo_cache: dict, levels: dict, crowd: dic
             "position_commits_there_now": sum(1 for p in peers if p[0] <= day < p[1]),
             "candidates": len(by_school),
             "visit_recency_rank": recency_rank.get(s, NEVER),
+            # Coverage naming this school alongside flip talk or a prediction ("smart money is on the Tigers").
+            "insider_flip_mentions_90d": sum(1 for r in talk if r[1] and s in r[4]) if covered else None,
+            "insider_prediction_mentions_90d": sum(1 for r in talk if r[3] and s in r[4]) if covered else None,
             "in_state": str(g.get("is_in_state_commit", "")),
             "power_program": "yes" if s in POWER_TEAMS else "no",
             "star_bucket": recruit.get("star_bucket", ""),
@@ -170,7 +177,9 @@ def build_training(commitments: list[dict], cutoff: date) -> tuple[pd.DataFrame,
             for r in rows:
                 candidates.append({"snapshot_id": snapshot_id, "class_year": c["class_year"], "name": c["recruit"].get("name", ""),
                                    "committed_school": c["school"], "target": int(r["school"] == dest), **r})
-    return pd.DataFrame(candidates), pd.DataFrame(snapshots)
+    frame = pd.DataFrame(candidates)
+    frame[CANDIDATE_NUMERIC] = frame[CANDIDATE_NUMERIC].apply(pd.to_numeric, errors="coerce")
+    return frame, pd.DataFrame(snapshots)
 
 
 def visits_first_rule(frame: pd.DataFrame) -> pd.Series:
@@ -209,6 +218,7 @@ def main() -> int:
         timeline += [{k: r[k] for k in ("class_year", "player_id", "name", "event_type", "event_date", "school")}
                      for r in load_csv(args.extra_events) if r.get("counted") == "yes" and in_high_school_cycle(r)]
     cutoff = max(parse_date(r["event_date"]) or date.min for r in timeline if r["event_type"] == "Decommit")
+    load_insider_signals(Path("data/insider_signals.csv"))
     commitments = build_commitments(recruits, events_by_player(timeline), cutoff)
 
     frame, snapshots = build_training(commitments, cutoff)
@@ -262,6 +272,7 @@ def main() -> int:
             live_rows.append({"snapshot_id": snapshot_id, "class_year": row.class_year, "name": row.name, "position": row.position,
                               "committed_school": row.committed_school, "break_before_signing": row.break_before_signing, **r})
     live, live_snap = pd.DataFrame(live_rows), pd.DataFrame(live_snapshots)
+    live[CANDIDATE_NUMERIC] = live[CANDIDATE_NUMERIC].apply(pd.to_numeric, errors="coerce")
     live["score"] = model.predict_proba(live[CANDIDATE_FEATURES])[:, 1]
     coverage = pd.Series(cover.predict_proba(live_snap[COVERAGE_FEATURES])[:, 1], index=live_snap["snapshot_id"].to_numpy())
     live["if_he_flips"] = share_out(live, "score", coverage)
@@ -283,6 +294,10 @@ def main() -> int:
             parts.append(f"{int(r.miles_closer_than_committed)} miles closer to home")
         if r.earlier_commitment:
             parts.append("was committed there before")
+        if pd.notna(r.insider_prediction_mentions_90d) and r.insider_prediction_mentions_90d:
+            parts.append(f"insiders favor/predict ({int(r.insider_prediction_mentions_90d)} mentions)")
+        elif pd.notna(r.insider_flip_mentions_90d) and r.insider_flip_mentions_90d:
+            parts.append(f"named in flip talk ({int(r.insider_flip_mentions_90d)} mentions)")
         if not parts and r.offered:
             parts.append("offered")
         return "; ".join(parts)
