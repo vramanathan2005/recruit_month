@@ -723,11 +723,12 @@ def risk_label(probability: object) -> str:
         value = float(probability)
     except (TypeError, ValueError):
         return "Unknown"
-    if value >= 70:
-        return "Very High"
+    # The flip chance is the snapshot model's chance to break before signing (a typical 2027 commit is ~23%).
     if value >= 50:
-        return "High"
+        return "Very High"
     if value >= 35:
+        return "High"
+    if value >= 25:
         return "Medium"
     return "Low"
 
@@ -850,6 +851,9 @@ def numeric_value(value: object) -> float:
 
 
 def risk_read(row: pd.Series) -> str:
+    reasons = clean_phrase(row.get("new_why", ""))
+    if reasons:
+        return reasons
     label = risk_label(row.get("model_decommit_flip_probability_num", ""))
     loose_signals = readable_reasons(row).split("; ") if readable_reasons(row) else []
     other_activity = sum(
@@ -934,6 +938,47 @@ def data_quality_html(row: pd.Series, texas_mode: bool = False) -> str:
 
 def data_quality_text(row: pd.Series, texas_mode: bool = False) -> str:
     return "; ".join(label for _, label in data_quality_notes(row, texas_mode=texas_mode))
+
+
+@st.cache_data
+def load_new_board() -> pd.DataFrame:
+    """The snapshot model's live board (train_flip_snapshot_model.py → bayes_layer.py → train_flip_destination_model.py)."""
+    path = BOARD_DIR / "live_flip_risk.csv"
+    return pd.read_csv(path, dtype={"player_id": str, "class_year": str}) if path.exists() else pd.DataFrame()
+
+
+def apply_new_model(df: pd.DataFrame) -> pd.DataFrame:
+    """Replace the old at-commit probability with the snapshot model's chance to break before signing, and add
+    its range, 60-day chance, likely destinations, reasons and insider-switch note. Rows the new board doesn't
+    cover keep the old number, marked."""
+    new = load_new_board()
+    if new.empty or df.empty:
+        return df
+    new = new.drop_duplicates(["class_year", "player_id"])
+    cols = {"break_before_signing": "new_p", "before_signing_low": "new_low", "before_signing_high": "new_high",
+            "break_probability_60d": "new_60d", "likely_destinations": "likely_destinations", "why": "new_why",
+            "insider_switch_adjusted": "insider_note", "tree_before_signing": "tree_before_signing"}
+    new = new[["class_year", "player_id"] + [c for c in cols if c in new.columns]].rename(columns=cols)
+    df = df.drop(columns=[c for c in cols.values() if c in df.columns])
+    df["class_year"], df["player_id"] = df["class_year"].astype(str), df["player_id"].astype(str)
+    df = df.merge(new, on=["class_year", "player_id"], how="left")
+    hit = df["new_p"].notna()
+    df.loc[hit, "model_decommit_flip_probability"] = (df.loc[hit, "new_p"] * 100).map(lambda v: f"{v:.1f}%")
+    df.loc[hit, "model_stick_probability"] = ((1 - df.loc[hit, "new_p"]) * 100).map(lambda v: f"{v:.1f}%")
+    df["model_source"] = hit.map({True: "new", False: "old model (not on the live board)"})
+    # Old-model numbers are on a different scale, so those rows go after everyone the new model scored.
+    df["_new"] = hit
+    df["_sort"] = df["new_p"].fillna(percent_to_float(df["model_decommit_flip_probability"]) / 100)
+    df = df.sort_values(["_new", "_sort"], ascending=[False, False]).drop(columns=["_new", "_sort"]).reset_index(drop=True)
+    df["board_rank"] = range(1, len(df) + 1)
+    return df.fillna("")
+
+
+def pct(value: object) -> str:
+    try:
+        return f"{float(value) * 100:.0f}%"
+    except (TypeError, ValueError):
+        return ""
 
 
 def prepare_board(df: pd.DataFrame) -> pd.DataFrame:
@@ -1355,11 +1400,11 @@ def risk_class(row: pd.Series) -> str:
 
 def map_color(row: pd.Series, texas_mode: bool = False) -> list[int]:
     risk = numeric_value(row.get("model_decommit_flip_probability_num", 0))
-    if risk >= 70:
-        return [191, 87, 0, 225]
     if risk >= 50:
-        return [143, 63, 0, 210]
+        return [191, 87, 0, 225]
     if risk >= 35:
+        return [143, 63, 0, 210]
+    if risk >= 25:
         return [85, 85, 85, 190]
     return [47, 107, 79, 170]
 
@@ -1425,7 +1470,7 @@ def map_rows(df: pd.DataFrame, texas_mode: bool = False) -> pd.DataFrame:
         else '<div style="width:48px;height:60px;border:1px solid #D8D8D8;background:#F4F1ED;"></div>'
     )
     mapped["ActionColor"] = mapped["model_decommit_flip_probability_num"].map(
-        lambda v: "#BF5700" if numeric_value(v) >= 50 else "#555555"
+        lambda v: "#BF5700" if numeric_value(v) >= 35 else "#555555"
     )
     mapped["color"] = mapped.apply(lambda row: map_color(row, texas_mode=texas_mode), axis=1)
     mapped["radius"] = mapped["model_decommit_flip_probability_num"].fillna(20).clip(20, 100).map(lambda value: 5 + float(value) / 14)
@@ -1447,7 +1492,7 @@ def school_map_rows(df: pd.DataFrame) -> pd.DataFrame:
     ).reset_index()
     grouped["Risk"] = grouped["AvgRisk"].map(lambda value: f"{float(value):.1f}%" if pd.notna(value) else "n/a")
     grouped["radius"] = grouped["Players"].clip(1, 35).map(lambda value: 7 + int(value) * 0.8)
-    grouped["color"] = grouped["AvgRisk"].fillna(0).map(lambda risk: [191, 87, 0, 220] if risk >= 50 else [85, 85, 85, 185])
+    grouped["color"] = grouped["AvgRisk"].fillna(0).map(lambda risk: [191, 87, 0, 220] if risk >= 35 else [85, 85, 85, 185])
     return grouped
 
 
@@ -1760,6 +1805,14 @@ def display_call_sheet(df: pd.DataFrame, texas_mode: bool = False) -> None:
         quality = html.escape(data_quality_text(row, texas_mode=texas_mode))
         quality_markup = data_quality_html(row, texas_mode=texas_mode)
         risk_note = html.escape(short_risk_read(row))
+        low, high = pct(row.get("new_low", "")), pct(row.get("new_high", ""))
+        range_text = html.escape(f" (range {low}-{high})") if low and high else ""
+        sixty = html.escape(pct(row.get("new_60d", "")) or "n/a")
+        destinations = html.escape(clean_phrase(row.get("likely_destinations", "")) or "not scored")
+        insider = clean_phrase(row.get("insider_note", ""))
+        insider_line = f'<dt>Insiders</dt><dd>{html.escape(insider)} (model alone said {html.escape(pct(row.get("tree_before_signing", "")))})</dd>' if insider else ""
+        if row.get("model_source", "") not in ("", "new"):
+            range_text += html.escape(" · old model")
         profile_risk_note = html.escape(short_risk_read(row))
         if texas_mode:
             texas_distance = html.escape(target_distance_summary(row) or "Distance not captured")
@@ -1806,7 +1859,9 @@ def display_call_sheet(df: pd.DataFrame, texas_mode: bool = False) -> None:
             f'<div class="profile-line">Since: {committed_date}</div>'
             f'</div></div>'
             f'<dl class="profile-grid">'
-            f'<dt>Risk</dt><dd>{flip} flip / {stick} stick</dd>'
+            f'<dt>Risk</dt><dd>{flip} to flip before signing{range_text} &middot; {sixty} in the next 60 days</dd>'
+            f'<dt>If he flips</dt><dd>{destinations}</dd>'
+            f'{insider_line}'
             f'<dt>Context</dt><dd>{extra_detail}</dd>'
             f'<dt>Activity</dt><dd>{activity}</dd>'
             f'<dt>Data</dt><dd>{quality}</dd>'
@@ -1816,7 +1871,8 @@ def display_call_sheet(df: pd.DataFrame, texas_mode: bool = False) -> None:
             f'</div>'
             f'</td>'
             f'<td><div>{team}</div><div class="commit-subline">Home: {home}</div><div class="commit-subline">Since: {committed_date}</div></td>'
-            f'<td><div class="call-risk {risk_class(row)}">{risk}</div><div class="call-muted">{flip} flip</div><div class="call-muted">{risk_note}</div></td>'
+            f'<td><div class="call-risk {risk_class(row)}">{risk}</div><div class="call-muted">{flip} before signing{range_text}</div>'
+            f'<div class="call-muted">If he flips: {html.escape(clean_phrase(row.get("likely_destinations", "")).split(";")[0] or "not scored")}</div></td>'
             f'<td>{extra_cell}</td>'
             f'<td><a class="call-link" href="{profile}" target="_blank">247</a></td>'
             f'</tr>'
@@ -1972,7 +2028,7 @@ def metric_row(df: pd.DataFrame, texas_mode: bool = False) -> None:
         cols[1].metric("Avg Move Risk", "n/a")
     very_high = 0
     if "model_decommit_flip_probability_num" in df.columns and len(df):
-        very_high = int((df["model_decommit_flip_probability_num"].fillna(0) >= 70).sum())
+        very_high = int((df["model_decommit_flip_probability_num"].fillna(0) >= 50).sum())
     cols[2].metric("Very High Risk", f"{very_high:,}")
     activity_cols = [col for col in ["post_commit_other_school_official_visits", "post_commit_other_school_visits", "post_commit_other_school_offers"] if col in df.columns]
     activity = 0
@@ -2537,11 +2593,10 @@ def legacy_main() -> None:
 def main() -> None:
     """Render one recruiting board; supporting research stays out of the way."""
     inject_theme()
-    target = prepare_board(load_csv(str(BOARD_DIR / "target_board_texas_2027.csv")))
-    national = prepare_board(load_csv(str(BOARD_DIR / "boss_view_2027_power_team_commits.csv")))
-    all_commits = prepare_board(load_csv(str(BOARD_DIR / "flip_board_all_commits.csv")))
-    all_commits = all_commits[all_commits["class_year"].astype(str) == "2027"].copy()
-    rolling_backtest = load_csv(str(DATA_DIR / "flip_model_rolling_backtest.csv"))
+    target = prepare_board(apply_new_model(load_csv(str(BOARD_DIR / "target_board_texas_2027.csv"))))
+    national = prepare_board(apply_new_model(load_csv(str(BOARD_DIR / "boss_view_2027_power_team_commits.csv"))))
+    all_commits = load_csv(str(BOARD_DIR / "flip_board_all_commits.csv"))
+    all_commits = prepare_board(apply_new_model(all_commits[all_commits["class_year"].astype(str) == "2027"].copy()))
     timeline_events = load_csv(str(DATA_DIR / "timeline_events.csv"))
 
     hero()
@@ -2595,14 +2650,41 @@ def main() -> None:
         section_title("How This Board Has Done")
         briefing_box(
             "Did it identify weak commitments?",
-            "We taught the board using older recruiting classes, then tested it on the 2025 and 2026 classes it had not seen. A broken commitment means the player later decommitted or changed schools.",
+            "Each past class was scored by a model trained only on earlier classes, every two weeks from commitment to "
+            "signing, using only what was known on that date — then checked against what actually happened. "
+            "'Weekly top 25' is the share of each week's 25 highest-risk commitments that broke before signing.",
         )
-        model_summary_metrics(rolling_backtest)
-        st.caption("The key number: among the 20 names the board ranked loosest, how many later broke their original commitment.")
-        st.dataframe(model_scorecard(rolling_backtest), width="stretch", hide_index=True)
-        with st.expander("Older training-class research"):
-            st.caption("These older classes helped teach the model, so they are examples, not the clean test shown above.")
-            st.dataframe(rolling_backtest, width="stretch", hide_index=True)
+        before = load_csv(str(DATA_DIR / "flip_snapshot_before_signing_validation.csv"))
+        before = before[before["stage"] == "all"] if "stage" in before else before
+        if not before.empty:
+            st.markdown("**Chance to break before signing** (the number on this board)")
+            st.dataframe(pd.DataFrame({
+                "Test class": before["checked_on"].astype(str),
+                "Weekly top 25 who broke": pd.to_numeric(before["top_25_hit_rate"], errors="coerce").map(lambda v: f"{v:.0%}" if pd.notna(v) else ""),
+                "Board's average": pd.to_numeric(before["calibrated"], errors="coerce").map(lambda v: f"{v:.0%}"),
+                "Actually broke": pd.to_numeric(before["actual"], errors="coerce").map(lambda v: f"{v:.0%}"),
+                "Ranking accuracy (0.5 = coin flip)": pd.to_numeric(before["auc"], errors="coerce").map(lambda v: f"{v:.2f}"),
+            }), width="stretch", hide_index=True)
+        boards = load_csv(str(DATA_DIR / "flip_snapshot_board_backtest.csv"))
+        boards = boards[(boards["model"] == "boosted") & (boards["rows"] == "all snapshots")] if "model" in boards else boards
+        if not boards.empty:
+            st.markdown("**Chance to break in the next 60 days**")
+            st.dataframe(pd.DataFrame({
+                "Test class": boards["class_year"].astype(str),
+                "Weekly top 25 who broke within 60 days": pd.to_numeric(boards["top_25_hit_rate"], errors="coerce").map(lambda v: f"{v:.0%}"),
+                "All commits who broke within 60 days": pd.to_numeric(boards["board_base_rate"], errors="coerce").map(lambda v: f"{v:.0%}"),
+            }), width="stretch", hide_index=True)
+        dest = load_csv(str(DATA_DIR / "flip_destination_validation.csv"))
+        dest = dest[dest["method"] == "model"] if "method" in dest else dest
+        if not dest.empty:
+            st.markdown("**Where he'd go** (among players who flipped to a school already recruiting him)")
+            st.dataframe(pd.DataFrame({
+                "Test class": dest["class_year"].astype(str),
+                "Top pick right": pd.to_numeric(dest["top_1_when_on_radar"], errors="coerce").map(lambda v: f"{v:.0%}"),
+                "Right school in top 3": pd.to_numeric(dest["top_3_when_on_radar"], errors="coerce").map(lambda v: f"{v:.0%}"),
+            }), width="stretch", hide_index=True)
+        st.caption("Players with an On3 insider switch are adjusted by a Bayesian layer (odds about x5.6 for a switch under 45 days old, "
+                   "x1.9 for an older one), tested by learning from two past classes and checking on the third.")
 
     with tab_timing:
         commit_timing_tab(load_commit_calendar())
