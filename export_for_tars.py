@@ -194,6 +194,14 @@ def insider_note(text: str, committed: str) -> str | None:
             f"so his number includes that.")
 
 
+def hot_seat_note(text: str, committed: str) -> str | None:
+    hit = re.search(r"odds x([\d.]+)", str(text or ""))
+    if not hit:
+        return None
+    return (f"{committed}'s head coach is in the latest Coaches Hot Seat top 10. Past commits to a hot-seat coach who hadn't "
+            f"been fired yet broke about {float(hit.group(1)):.1f}x as often as the model's other signals suggest, so his number includes that.")
+
+
 def build() -> list[dict]:
     built_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
     board = pd.read_csv("data/flip_boards/live_flip_risk.csv", dtype={"player_id": str})
@@ -288,6 +296,8 @@ def build() -> list[dict]:
                     if c.school_key == "texas":
                         texas = entry
             not_recruiting = float(lv.get("not_on_radar_if_flips") or 0)
+            hot_seat = isinstance(lv.get("hot_seat_adjusted"), str) and bool(lv.get("hot_seat_adjusted"))
+            adjusted = hot_seat or (isinstance(lv.get("insider_switch_adjusted"), str) and bool(lv.get("insider_switch_adjusted")))
             shown = sum(d["ifFlips"] for d in destinations)
             # A player who decommits and re-commits to the same school counts as staying: every chance shown is
             # "ends up somewhere else" (the model's decommit chance x the share of decommits that don't come back).
@@ -299,9 +309,10 @@ def build() -> list[dict]:
                 "stays": round(1 - leaves, 4), "leaves": round(leaves, 4),
                 "destinations": destinations, "otherSchools": round(max(0.0, 1 - shown - not_recruiting) * leaves, 4),
                 "notRecruitingYet": round(not_recruiting * leaves, 4), "texas": texas,
-                "reasons": risk_reasons(lv.get("why"), name),
-                "insiderNote": insider_note(lv.get("insider_switch_adjusted"), name),
-                "withoutInsiderSwitch": elsewhere(lv.get("tree_before_signing")) if isinstance(lv.get("insider_switch_adjusted"), str) else None,
+                "reasons": ([{"text": f"{name}'s head coach is in the Coaches Hot Seat top 10", "lowers": False}] if hot_seat else [])
+                           + risk_reasons(lv.get("why"), name),
+                "insiderNote": " ".join(n for n in (insider_note(lv.get("insider_switch_adjusted"), name), hot_seat_note(lv.get("hot_seat_adjusted"), name)) if n) or None,
+                "withoutInsiderSwitch": elsewhere(lv.get("tree_before_signing")) if adjusted else None,
                 "daysCommitted": num(lv.get("days_committed")), "daysToSigning": num(lv.get("days_to_signing")),
                 "asOf": str(lv["snapshot_date"]),
             }

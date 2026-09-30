@@ -14,3 +14,4 @@ data/insider_signals.csv
 
 # Disabled X collectors (reference UC Report internals): local only
 x_activity_*.py
+data/hot_seat_history.csv
