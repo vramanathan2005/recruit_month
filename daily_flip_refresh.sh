@@ -11,6 +11,9 @@
 cd "$(dirname "$0")" || exit 1
 PY=.venv/bin/python
 echo "=== flip refresh $(date) ==="
+# Cloudflare's browser login lasts an hour; a scheduled run finds it expired, and the database and KV commands fail
+# rather than renew it. Asking who's logged in renews it.
+npx --prefix "$HOME/Tars" wrangler whoami >/dev/null 2>&1 || true
 
 step() {   # step <fatal|ok> <command...>: run it, log how long it took, stop on a fatal failure
   local fatal=$1; shift
