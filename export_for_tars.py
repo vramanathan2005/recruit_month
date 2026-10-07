@@ -12,7 +12,9 @@ insider picks, so they only go to KV (behind the Tars login), never to this repo
 Keys:
     recruiting:index            every ranked recruit in the live classes (search, and the flip badge on a profile)
     recruiting:board            every live commitment with its flip outlook (Commits and Flip Watch)
-    recruiting:player:<id>      one recruit's full profile: flip outlook, timeline, insider picks, coverage
+    recruiting:player:<id>      one recruit's full profile: flip outlook (or, uncommitted, where he's likely to commit),
+                                timeline, insider picks, coverage
+    recruiting:uncommitted      every uncommitted recruit with where he's likely to commit (Commit Watch)
 """
 
 from __future__ import annotations
@@ -206,6 +208,12 @@ def build() -> list[dict]:
     built_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
     board = pd.read_csv("data/flip_boards/live_flip_risk.csv", dtype={"player_id": str})
     dest = pd.read_csv("data/flip_boards/live_flip_destinations.csv", dtype={"player_id": str})
+    # The commitment model (train_commit_destination_model.py): where each uncommitted recruit is likely to commit
+    commit_path = Path("data/flip_boards/live_commit_destinations.csv")
+    commit_dest = pd.read_csv(commit_path, dtype={"player_id": str}) if commit_path.exists() else pd.DataFrame(columns=["player_id"])
+    outlook_path = Path("data/flip_boards/live_commit_outlook.csv")
+    commit_outlook = pd.read_csv(outlook_path, dtype={"player_id": str}).set_index("player_id") if outlook_path.exists() else pd.DataFrame()
+    commit_by = {pid: g.sort_values("commit_probability", ascending=False) for pid, g in commit_dest.groupby("player_id")}
     rankings = pd.read_csv("data/raw_rankings.csv", dtype={"player_id": str})
     rankings = rankings[rankings["class_year"].isin(LIVE_CLASSES)].drop_duplicates("player_id")
     images = dict(pd.read_csv("data/player_images.csv", dtype={"player_id": str}).values)
@@ -247,7 +255,7 @@ def build() -> list[dict]:
         coverage_by[r.player_id].append({"date": r.date, "source": r.source, "title": title,
                                          "url": r.url, "tags": tags})
 
-    index, board_rows, entries = [], [], []
+    index, board_rows, uncommitted_rows, entries = [], [], [], []
     class_rank = board.groupby("class_year")["break_before_signing"].rank(ascending=False, method="min")
     rank_of = dict(zip(board["player_id"], class_rank))
     class_size = board.groupby("class_year").size().to_dict()
@@ -316,6 +324,26 @@ def build() -> list[dict]:
                 "daysCommitted": num(lv.get("days_committed")), "daysToSigning": num(lv.get("days_to_signing")),
                 "asOf": str(lv["snapshot_date"]),
             }
+        # Uncommitted: where he's likely to commit (every school on his radar, most likely first)
+        commit = None
+        if committed_to is None and pid in commit_outlook.index:
+            row = commit_outlook.loc[pid]
+            if isinstance(row, pd.DataFrame):
+                row = row.iloc[0]
+            schools, texas_commit = [], None
+            for c in (commit_by.get(pid).itertuples() if pid in commit_by else []):
+                entry = {"school": school(c.school_key), "chance": round(float(c.commit_probability), 4),
+                         # the commitment model writes its reasons in the wording Tars shows
+                         "why": [part.strip() for part in (c.why if isinstance(c.why, str) else "").split(";") if part.strip()]}
+                schools.append(entry)
+                if c.school_key == "texas":
+                    texas_commit = entry
+            not_on_radar = float(row.get("not_on_radar") or 0)
+            shown = sum(d["chance"] for d in schools)
+            commit = {"destinations": schools, "texas": texas_commit, "notOnRadar": round(not_on_radar, 4),
+                      "otherSchools": round(max(0.0, 1 - shown - not_on_radar), 4),
+                      "offers": int(row.get("offers_on_record") or 0), "officialVisits": int(row.get("official_visits_on_record") or 0),
+                      "asOf": built_at[:10]}
         picks = []
         for pick in m.ON3_PICKS.get(pid, []):
             if not pick["date"][:4].isdigit():
@@ -333,12 +361,18 @@ def build() -> list[dict]:
                    "unofficialVisits": len([e for e in visits if e["type"] == "Unofficial Visit"])}
         index.append({k: player[k] for k in ("id", "name", "classYear", "position", "stars", "nationalRank", "highSchool", "hometown")}
                      | {"committedTo": committed_to["name"] if committed_to else None,
+                        "committedKey": committed_to["key"] if committed_to else None,
+                        # Texas offered him (247 timeline): the Boards color a card by commitment and Texas offer
+                        "texasOffer": any((e["school"] or {}).get("key") == "texas" for e in offers),
                         "chance": flip["chance"] if flip else None, "label": flip["label"] if flip else None})
         if flip:
             board_rows.append(player | {"flip": {k: v for k, v in flip.items() if k not in ("reasons", "destinations")}
                                         | {"reasons": flip["reasons"][:3], "destinations": [d | {"why": []} for d in flip["destinations"][:3]]},
                                         "summary": summary})
-        profile = player | {"flip": flip, "summary": summary, "timeline": events, "picks": picks,
+        if commit:
+            uncommitted_rows.append(player | {"commit": commit | {"destinations": [d | {"why": d["why"][:2]} for d in commit["destinations"][:3]]},
+                                              "summary": summary})
+        profile = player | {"flip": flip, "commit": commit, "summary": summary, "timeline": events, "picks": picks,
                             "coverage": coverage_by.get(pid, []), "builtAt": built_at}
         entries.append({"key": f"recruiting:player:{pid}", "value": json.dumps(profile, separators=(",", ":"))})
 
@@ -346,7 +380,9 @@ def build() -> list[dict]:
     meta = {"builtAt": built_at, "asOf": str(board["snapshot_date"].max()), "classes": LIVE_CLASSES}
     entries.append({"key": "recruiting:board", "value": json.dumps(meta | {"players": board_rows}, separators=(",", ":"))})
     entries.append({"key": "recruiting:index", "value": json.dumps(meta | {"players": index}, separators=(",", ":"))})
-    print(f"{len(index):,} recruits ({len(board_rows):,} live commitments), {len(entries):,} KV entries, "
+    uncommitted_rows.sort(key=lambda r: (r["nationalRank"] is None, r["nationalRank"] or 0, -(r["rating"] or 0)))
+    entries.append({"key": "recruiting:uncommitted", "value": json.dumps(meta | {"players": uncommitted_rows}, separators=(",", ":"))})
+    print(f"{len(index):,} recruits ({len(board_rows):,} live commitments, {len(uncommitted_rows):,} uncommitted with a prediction), {len(entries):,} KV entries, "
           f"{sum(len(e['value']) for e in entries) / 1e6:.1f} MB")
     return entries
 
