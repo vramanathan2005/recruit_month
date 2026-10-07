@@ -194,6 +194,32 @@ def first_commitments(grouped: dict) -> dict:
     return out
 
 
+def web_report_events(rows: list[dict], timeline: list[dict]) -> list[dict]:
+    """Visits and offers from Tars's web reports that 247 doesn't have. Besides the ones counted outright, this takes
+    those reported as having happened without an exact date ("visited Miami late last month"), dated to the article's
+    report of them: they still say a school is recruiting him. Each is counted once, and not when 247 or an earlier
+    article already has the same school within two weeks. Planned visits don't count."""
+    same = lambda a, b: abs((a - b).days) <= 14
+    known: dict[tuple, list[tuple]] = {}
+    for r in timeline:
+        d = parse_date(r["event_date"])
+        if d:
+            known.setdefault((r["player_id"], r["event_type"]), []).append((d, norm_team(school_of(r))))
+    out = []
+    for r in sorted(rows, key=lambda r: parse_date(r["event_date"]) or date.min):
+        if not (r.get("counted") == "yes" or r.get("why_not_counted") == "date not stated exactly") or not r.get("player_id"):
+            continue
+        if r["event_type"] not in ("Offer", "Official Visit", "Unofficial Visit") or not in_high_school_cycle(r):
+            continue
+        d, school = parse_date(r["event_date"]), norm_team(school_of(r))
+        seen = known.setdefault((r["player_id"], r["event_type"]), [])
+        if not d or not school or any(same(d, k) and (school == s or school.startswith(s + " ") or s.startswith(school + " ")) for k, s in seen):
+            continue
+        seen.append((d, school))
+        out.append({k: r[k] for k in ("class_year", "player_id", "name", "event_type", "event_date", "school")})
+    return out
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--scores-file", type=Path, default=Path("data/commitment_strength_scores.csv"))
@@ -207,10 +233,12 @@ def main() -> int:
     recruits = {(r["class_year"], r["player_id"]): r for r in dedupe_commits(load_csv(args.recruits_file))}
     timeline = [r for r in load_csv(args.timeline_file) if in_high_school_cycle(r)]
     if args.extra_events.exists():
-        timeline += [{k: r[k] for k in ("class_year", "player_id", "name", "event_type", "event_date", "school")}
-                     for r in load_csv(args.extra_events) if r.get("counted") == "yes" and in_high_school_cycle(r)]
+        timeline += web_report_events(load_csv(args.extra_events), timeline)
+    # Today is today: 247 carries scheduled future visits and the odd bad date (an offer in 2035), and nothing dated
+    # after today counts yet
+    today = date.today()
+    timeline = [r for r in timeline if (parse_date(r["event_date"]) or date.min) <= today]
     grouped = events_by_player(timeline)
-    today = max(parse_date(r["event_date"]) or date.min for r in timeline)
     load_insider_signals(Path("data/insider_signals.csv"))
     load_on3_picks(Path.home() / "Tars" / "reports" / "web_report" / "backfill")
     commitments = build_commitments(scored, grouped, today)
