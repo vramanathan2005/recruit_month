@@ -362,7 +362,9 @@ def coaching_features(school_norm: str, start: date, day: date) -> dict:
             "days_since_coach_change": (day - recent[-1]).days if recent else NO_VISIT_DAYS}
 
 
-def snapshot_rows(commitments: list[dict], cutoff: date, labeled_only: bool) -> list[dict]:
+def snapshot_rows(commitments: list[dict], cutoff: date, labeled_only: bool, as_of: date | None = None) -> list[dict]:
+    """`cutoff` bounds the labels (outcomes known through it); the live board (labeled_only=False) scores every
+    commitment as of `as_of`, the date the data was pulled, so one made after the last decommit still shows."""
     crowd = crowding_index(commitments)
     classes = class_index(commitments)
     levels = program_levels(commitments)
@@ -397,10 +399,10 @@ def snapshot_rows(commitments: list[dict], cutoff: date, labeled_only: bool) -> 
         if labeled_only:
             last_grid = min(last_grid, cutoff - timedelta(days=HORIZON_DAYS))
         else:
-            last_grid = min(last_grid, cutoff)
+            last_grid = min(last_grid, as_of or cutoff)
         days = grid_dates(start, last_grid)
         if not labeled_only and last_grid >= start and (not days or days[-1] != last_grid):
-            days.append(last_grid)  # the live board scores every commitment as of the cutoff
+            days.append(last_grid)  # the live board scores every commitment as of the data date
         for day in days:
             seen_with_source = after[: bisect_right(after_days, day)]
             seen = [(d, kind, s) for d, kind, s, _ in seen_with_source]
@@ -783,9 +785,12 @@ def main() -> int:
     changes = load_coaching_changes(args.coaching_changes, args.commit_dates, timeline)
     print(f"{changes} head coaching changes loaded" if changes else "no coaching changes file; run fetch_coaching_changes.py")
     cutoff = date.fromisoformat(args.cutoff) if args.cutoff else max(parse_date(r["event_date"]) or date.min for r in timeline if r["event_type"] == "Decommit")
+    # The live board's date: the newest event 247 lists (it has future-dated visits, so never past today). The cutoff
+    # (last decommit) only bounds the labels: scoring the board as of it left off every commitment made since.
+    as_of = max(cutoff, min(date.today(), max(d for d in (parse_date(r["event_date"]) for r in timeline) if d and d <= date.today())))
     grouped = events_by_player(timeline)
     commitments = build_commitments(recruits, grouped, cutoff)
-    print(f"cutoff {cutoff}; {len(commitments)} commitments")
+    print(f"cutoff {cutoff}; live board as of {as_of}; {len(commitments)} commitments")
 
     frame = numeric_features(pd.DataFrame(snapshot_rows(commitments, cutoff, labeled_only=True)))
     frame = frame[frame["target"].notna()].copy()
@@ -863,12 +868,12 @@ def main() -> int:
     best = "boosted" if test_auc.get("boosted", 0) > test_auc.get("logistic", 0) else "logistic"
     final = boosted_model() if best == "boosted" else logistic_model()
     final.fit(frame[FEATURES], frame["target"])
-    live = numeric_features(pd.DataFrame(snapshot_rows(commitments, cutoff, labeled_only=False)))
+    live = numeric_features(pd.DataFrame(snapshot_rows(commitments, cutoff, labeled_only=False, as_of=as_of)))
     live = live[(live["snapshot_date"] == live.groupby(["class_year", "player_id", "commitment_date"])["snapshot_date"].transform("max"))]
-    live = live[pd.to_datetime(live["snapshot_date"]).dt.date > cutoff - timedelta(days=GRID_DAYS)]
+    live = live[pd.to_datetime(live["snapshot_date"]).dt.date > as_of - timedelta(days=GRID_DAYS)]
     # Only commitments still standing on the data date: one that broke in the last two weeks (Kavarris Duncan,
     # Tulane → Alabama on 9/20) would otherwise still show with its last snapshot.
-    active = {(c["class_year"], str(c["key"][1]), c["start"].isoformat()) for c in commitments if c["end"] > cutoff}
+    active = {(c["class_year"], str(c["key"][1]), c["start"].isoformat()) for c in commitments if c["end"] > as_of}
     live = live[[(int(r.class_year), str(r.player_id), r.commitment_date) in active for r in live.itertuples()]]
     live = live[live.apply(lambda r: date.fromisoformat(r["snapshot_date"]) < high_school_cycle_cutoff(int(r["class_year"])), axis=1)]
     live["model_raw_probability"] = final.predict_proba(live[FEATURES])[:, 1].round(4)
@@ -876,7 +881,7 @@ def main() -> int:
     middle, low, high = bootstrap_range(frame, "target", live, calibrator, full)
     live["break_probability_60d"], live["break_60d_low"], live["break_60d_high"] = middle.round(4), low.round(4), high.round(4)
     print("scoring before-signing risk")
-    all_rows = numeric_features(pd.DataFrame(snapshot_rows(commitments, cutoff, labeled_only=False)))
+    all_rows = numeric_features(pd.DataFrame(snapshot_rows(commitments, cutoff, labeled_only=False, as_of=as_of)))
     before_df, before_probability, _ = before_signing_model(all_rows, live)
     before_df.to_csv(args.out_dir / "flip_snapshot_before_signing_validation.csv", index=False)
     live["break_before_signing"] = before_probability.round(4)
@@ -894,7 +899,7 @@ def main() -> int:
         "# Flip snapshot model", "",
         f"- Data cutoff: {cutoff}. Snapshots every {GRID_DAYS} days of every active commitment; target = decommit/flip within {HORIZON_DAYS} days.",
         f"- Labeled snapshots: {len(frame):,} ({frame['target'].mean():.1%} break within {HORIZON_DAYS} days). Each test class ({', '.join(map(str, TEST_YEARS))}) is scored by models trained only on the classes before it.",
-        f"- Live board model: {best} (higher test AUC), refit on all labeled snapshots; {len(live):,} active commitments scored as of {cutoff}.", "",
+        f"- Live board model: {best} (higher test AUC), refit on all labeled snapshots; {len(live):,} active commitments scored as of {as_of}.", "",
         "## Test classes", "", markdown(validation_df), "",
         f"## Weekly board check (top {BOARD_SIZE} on each date)", "", markdown(boards_df), "",
         "## Calibration (test classes, raw model)", "", markdown(calib_df), "",
