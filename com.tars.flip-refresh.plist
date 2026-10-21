@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.tars.flip-refresh</string>
+  <!-- Refreshes Flip Watch and Commit Watch and uploads them to Tars's Recruiting tab three times a day: 5:00 AM (after
+       the 4 AM web report), 1:00 PM and 7:00 PM. A run still going when the next is due makes that one skip (~/Projects/recruit_month/daily_flip_refresh.sh). The Mac wakes itself at 1:58 for the 2 AM
+       scouting rebuild (pmset repeat wakeorpoweron MTWRFSU 01:58:00), which keeps it awake until 5:15; this keeps it
+       awake while it runs. A run missed while the Mac was asleep or off starts when it wakes. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/zsh</string>
+    <string>-lc</string>
+    <string>caffeinate -i /Users/varunramanathan/Projects/recruit_month/daily_flip_refresh.sh</string>
+  </array>
+  <key>StartCalendarInterval</key>
+  <array>
+    <dict><key>Hour</key><integer>5</integer><key>Minute</key><integer>0</integer></dict>
+    <dict><key>Hour</key><integer>13</integer><key>Minute</key><integer>0</integer></dict>
+    <dict><key>Hour</key><integer>19</integer><key>Minute</key><integer>0</integer></dict>
+  </array>
+  <key>StandardOutPath</key>
+  <string>/Users/varunramanathan/Library/Logs/Tars/flip-refresh.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/varunramanathan/Library/Logs/Tars/flip-refresh.log</string>
+  <key>ProcessType</key>
+  <string>Background</string>
+</dict>
+</plist>
