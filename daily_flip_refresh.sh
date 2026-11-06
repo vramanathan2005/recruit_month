@@ -1,7 +1,7 @@
 #!/bin/zsh
 # Daily flip refresh: new 247 timelines, the day's web report visits, insider coverage and coaching news,
-# then the flip models, then the upload to Tars's Recruiting tab. Run by launchd three times a day: 5:00 (after the
-# 4:00 web report), 13:00 and 19:00, so news like a coach's firing or a decommit shows the same day (com.tars.flip-refresh in ~/Library/LaunchAgents); safe to run by hand.
+# then the flip models, then the upload to Tars's Recruiting tab. Run by launchd twice a day: 5:00 (after the
+# 4:00 web report) and 17:00, so news like a coach's firing or a decommit shows the same day (com.tars.flip-refresh in ~/Library/LaunchAgents); safe to run by hand.
 #
 # A data step that fails falls back to the last good copy of its data; a model step that fails stops the
 # run before the upload, so Tars keeps yesterday's numbers rather than half-finished ones.
@@ -10,7 +10,7 @@
 
 cd "$(dirname "$0")" || exit 1
 PY=.venv/bin/python
-# Three runs a day (5:00, 13:00, 19:00) and each takes 4-5 hours: a run that starts while the last is still going
+# Two runs a day (5:00, 17:00; three set off 247's bot check, Nov 5) and each takes 4-5 hours: a run that starts while the last is still going
 # skips rather than racing it over the same files.
 LOCK=data/.flip-refresh.pid
 if [[ -f $LOCK ]] && kill -0 "$(cat $LOCK)" 2>/dev/null; then
