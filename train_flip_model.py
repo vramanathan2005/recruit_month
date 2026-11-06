@@ -16,7 +16,7 @@ from sklearn.calibration import CalibratedClassifierCV
 from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import brier_score_loss, log_loss, roc_auc_score
+from sklearn.metrics import average_precision_score, brier_score_loss, log_loss, roc_auc_score
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
@@ -138,8 +138,10 @@ def metric_row(label: str, df: pd.DataFrame, probabilities: pd.Series) -> dict[s
     }
     if positives and negatives:
         row["auc"] = round(float(roc_auc_score(target, probabilities)), 4)
+        row["pr_auc"] = round(float(average_precision_score(target, probabilities)), 4)
     else:
         row["auc"] = ""
+        row["pr_auc"] = ""
     row["brier_score"] = round(float(brier_score_loss(target, probabilities)), 4) if len(df) else ""
     row["log_loss"] = round(float(log_loss(target, probabilities, labels=[0, 1])), 4) if len(df) else ""
     return row

@@ -38,7 +38,7 @@ from sklearn.compose import ColumnTransformer
 from sklearn.ensemble import HistGradientBoostingClassifier
 from sklearn.impute import SimpleImputer
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import brier_score_loss, log_loss, roc_auc_score
+from sklearn.metrics import average_precision_score, brier_score_loss, log_loss, roc_auc_score
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, OrdinalEncoder, StandardScaler
 
@@ -535,6 +535,7 @@ def metrics(label: str, target: pd.Series, probability: pd.Series) -> dict:
         "actual_rate": round(float(target.mean()), 4),
         "average_predicted": round(float(probability.mean()), 4),
         "auc": round(float(roc_auc_score(target, probability)), 4),
+        "pr_auc": round(float(average_precision_score(target, probability)), 4),
         "brier": round(float(brier_score_loss(target, probability)), 4),
         "log_loss": round(float(log_loss(target, probability.clip(1e-6, 1 - 1e-6))), 4),
     }
