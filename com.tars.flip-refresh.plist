@@ -15,16 +15,12 @@
     <string>caffeinate -i /Users/varunramanathan/Projects/recruit_month/daily_flip_refresh.sh</string>
   </array>
   <key>StartCalendarInterval</key>
-  <array>
-    <dict><key>Hour</key><integer>5</integer><key>Minute</key><integer>0</integer></dict>
-    <dict><key>Hour</key><integer>13</integer><key>Minute</key><integer>0</integer></dict>
-    <dict><key>Hour</key><integer>19</integer><key>Minute</key><integer>0</integer></dict>
-  </array>
+  <dict><key>Hour</key><integer>21</integer><key>Minute</key><integer>0</integer></dict>
   <key>StandardOutPath</key>
   <string>/Users/varunramanathan/Library/Logs/Tars/flip-refresh.log</string>
   <key>StandardErrorPath</key>
   <string>/Users/varunramanathan/Library/Logs/Tars/flip-refresh.log</string>
   <key>ProcessType</key>
-  <string>Background</string>
+  <string>Interactive</string>
 </dict>
 </plist>
