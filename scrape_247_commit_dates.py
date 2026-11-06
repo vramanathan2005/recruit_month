@@ -42,6 +42,18 @@ COMMIT_DATE_RE = re.compile(r"Committed:\s*(\d{1,2}/\d{1,2}/\d{4})")
 TIMELINE_HEADER_RE = re.compile(
     r"^(\w+ \d{1,2}, \d{4}):\s*(Commitment|Decommit|Signing|Enrollment|Offer|Official Visit|Unofficial Visit)$"
 )
+# Exit code when 247 answers with its bot check instead of the page
+BLOCKED_EXIT = 3
+
+
+class Blocked(requests.RequestException):
+    """247 answered with its bot check ("Client Challenge") instead of the page. Nov 5 2026: it began mid-run, the
+    3,103 challenge pages were cached and parsed as empty, and the 2027 and 2028 classes vanished from every output, so
+    the flip model crashed on a class with no rows."""
+
+
+def challenged(html: str) -> bool:
+    return "<title>Client Challenge" in html[:5000]
 
 
 @dataclass
@@ -135,7 +147,9 @@ class Fetcher:
         key = url + "?" + "&".join(f"{k}={v}" for k, v in sorted(params.items()))
         cache_file = self.cache_dir / (hashlib.sha1(key.encode("utf-8")).hexdigest() + ".html")
         if cache_file.exists() and not (self.refresh if refresh is None else refresh):
-            return cache_file.read_text(encoding="utf-8")
+            cached = cache_file.read_text(encoding="utf-8")
+            if not challenged(cached):          # a bot check cached before this guard is no page
+                return cached
 
         elapsed = time.time() - self.last_fetch
         if elapsed < self.delay:
@@ -147,8 +161,12 @@ class Fetcher:
                 response = self.session.get(url, params=params, timeout=(10, 60))
                 self.last_fetch = time.time()
                 response.raise_for_status()
+                if challenged(response.text):
+                    raise Blocked(f"247 answered {url} with its bot check")
                 cache_file.write_text(response.text, encoding="utf-8")
                 return response.text
+            except Blocked:
+                raise
             except requests.RequestException as error:
                 last_error = error
                 if attempt == 3:
@@ -167,14 +185,20 @@ def fetch_detail_html(cache_dir: Path, url: str, refresh: bool = False) -> str:
     cache_dir.mkdir(parents=True, exist_ok=True)
     cache_file = cache_path_for(cache_dir, url)
     if cache_file.exists() and not refresh:
-        return cache_file.read_text(encoding="utf-8")
+        cached = cache_file.read_text(encoding="utf-8")
+        if not challenged(cached):
+            return cached
     last_error: requests.RequestException | None = None
     for attempt in range(4):
         try:
             response = requests.get(url, headers=HEADERS, timeout=(10, 60))
             response.raise_for_status()
+            if challenged(response.text):
+                raise Blocked(f"247 answered {url} with its bot check")
             cache_file.write_text(response.text, encoding="utf-8")
             return response.text
+        except Blocked:
+            raise
         except requests.RequestException as error:
             last_error = error
             if attempt == 3:
@@ -406,6 +430,8 @@ def scrape_timeline_events(
             return parse_timeline_events(legacy_cache.read_text(encoding="utf-8"), recruit)
         try:
             html = fetch_detail_html(fetcher.cache_dir, url, refresh)
+        except Blocked:
+            raise
         except requests.RequestException:
             failed.append(recruit.profile_url)
             if not legacy_cache.exists():
@@ -441,6 +467,8 @@ def scrape_recruitment_details(
         try:
             html = fetch_detail_html(fetcher.cache_dir, recruit.recruitment_url, fetcher.refresh_for(recruit.class_year))
             return parse_recruitment_detail(html, recruit)
+        except Blocked:
+            raise
         except requests.RequestException:
             return None
 
@@ -671,6 +699,12 @@ def main() -> int:
         if not args.skip_commit_pages:
             commits.extend(scrape_paged(fetcher, commit_url, year, parse_commits_page, "commits", args.max_pages))
 
+    # a class being recruited never has nobody ranked: writing it empty would drop it from every model
+    empty = sorted(year for year in set(args.years) if fetcher.refresh_for(year) and not any(r.class_year == year for r in rankings))
+    if empty:
+        print(f"!! no recruits ranked for {', '.join(map(str, empty))}; 247's pages changed or didn't load. Kept the previous files", flush=True)
+        return 1
+
     if not args.skip_recruitment_details:
         details = scrape_recruitment_details(fetcher, rankings, args.detail_limit, args.detail_workers)
 
@@ -707,4 +741,9 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except Blocked as error:
+        # every file is written only after the whole scrape, so none is touched
+        print(f"!! {error}; 247 is blocking automated requests. Kept the previous files", flush=True)
+        sys.exit(BLOCKED_EXIT)

@@ -38,7 +38,9 @@ step() {   # step <fatal|ok> <command...>: run it, log how long it took, stop on
 }
 
 # Data (each keeps its previous output if it fails)
-step ok    $PY scrape_247_commit_dates.py --refresh-years 2027 2028   # 2026 has signed; it can't flip
+# 2026 has signed; it can't flip. Fatal: a scrape that couldn't load the live classes (247's bot check) leaves the
+# files as they were, and the models shouldn't run as if that were today's board
+step fatal $PY scrape_247_commit_dates.py --refresh-years 2027 2028
 step ok    $PY apply_tars_corrections.py             # staff commitment corrections from Tars, over the 247 data just scraped
 step ok    $PY build_player_image_index.py           # headshots for newly ranked recruits, from the pages just scraped
 step ok    $PY score_commitment_strength.py
