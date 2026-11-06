@@ -37,6 +37,7 @@ from sklearn.ensemble import HistGradientBoostingClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OrdinalEncoder
+from sklearn.metrics import average_precision_score, roc_auc_score
 
 from backtest_commitment_strength import events_by_player
 from build_flip_boards import POWER_TEAMS
@@ -167,6 +168,14 @@ def most_visits_rule(frame: pd.DataFrame) -> pd.Series:
     return frame["official_visits"] * 1000 + frame["unofficial_visits"] * 100 - np.minimum(frame["days_since_last_visit"], NEVER) / 100 + frame["offered"]
 
 
+def candidate_scores(target: pd.Series, score: pd.Series) -> dict:
+    y = target.astype(int)
+    if not 0 < y.sum() < len(y):
+        return {"candidate_roc_auc": "", "candidate_pr_auc": "", "candidate_base_rate": ""}
+    return {"candidate_roc_auc": round(float(roc_auc_score(y, score)), 4), "candidate_pr_auc": round(float(average_precision_score(y, score)), 4),
+            "candidate_base_rate": round(float(y.mean()), 4)}
+
+
 def evaluate(frame: pd.DataFrame, snapshots: pd.DataFrame, column: str, label: str) -> dict:
     ranked = frame.assign(rank=frame.groupby("snapshot_id")[column].rank(ascending=False, method="first"))
     ids = snapshots["snapshot_id"]
@@ -181,7 +190,9 @@ def evaluate(frame: pd.DataFrame, snapshots: pd.DataFrame, column: str, label: s
             "top_1_all": round(float(top1.mean()), 4), "top_3_all": round(float(top3.mean()), 4),
             "top_1_when_on_radar": round(float(top1[covered].mean()), 4), "top_3_when_on_radar": round(float(top3[covered].mean()), 4),
             "top_1_last_30_days": round(float(top1[near].mean()), 4), "top_3_last_30_days": round(float(top3[near].mean()), 4),
-            "destination_on_radar": round(float(covered.mean()), 4)}
+            "destination_on_radar": round(float(covered.mean()), 4),
+            # each candidate school as a yes/no (did he go there?), over every candidate in every snapshot
+            **candidate_scores(frame["target"], frame[column])}
 
 
 def first_commitments(grouped: dict) -> dict:
