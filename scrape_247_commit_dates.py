@@ -361,7 +361,8 @@ def parse_timeline_events(html: str, recruit: RankingRow) -> list[TimelineEventR
             continue
 
         date_str, event_type = match.group(1), match.group(2)
-        body = text_or_empty(item.select_one("p"))
+        # the first paragraph with text: a browser's copy of the page splits 247's <p> into an empty one and the text
+        body = next((t for t in (text_or_empty(p) for p in item.select("p")) if t), "")
         school = timeline_school_from_body(body, event_type, recruit.name)
         if not school:
             continue
