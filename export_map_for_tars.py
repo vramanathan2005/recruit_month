@@ -67,6 +67,32 @@ def stars_of(rating: float | None, score247: float | None = None) -> int | None:
     return None
 
 
+METRICS = ["height", "weight", "wingspan", "arm_length_verified", "hand", "forty", "shuttle", "vertical", "broad",
+           "t100", "t200", "t400", "h110", "lj", "hj", "shot"]          # Tars's lib/recruits.ts RECRUIT_METRICS
+
+
+def inches(height) -> float | None:
+    """247's "6-4" or "6-4.5" in inches."""
+    m = re.match(r"^\s*(\d)-(\d{1,2}(?:\.\d+)?)\s*$", str(height or ""))
+    return round(int(m.group(1)) * 12 + float(m.group(2)), 2) if m else None
+
+
+def name_key(name: str, state: str) -> str:
+    words = re.sub(r"[^a-z ]", "", str(name or "").lower().replace("-", " ")).split()
+    words = [w for w in words if w not in ("jr", "sr", "ii", "iii", "iv")]
+    return f"{' '.join(words)}|{str(state or '').upper()}"
+
+
+def measured(row, at) -> dict:
+    """A Tars recruits-table row's measurables (each cell [value, shown, from]) as {metric: value}."""
+    out = {}
+    for metric in METRICS:
+        cell = row[at[metric]] if metric in at else None
+        if isinstance(cell, list) and cell and isinstance(cell[0], (int, float)):
+            out[metric] = round(float(cell[0]), 3)
+    return out
+
+
 def kv_get(key: str) -> bytes | None:
     p = subprocess.run(["npx", "wrangler", "kv", "key", "get", key, "--namespace-id", NAMESPACE_ID, "--remote"], cwd=TARS, capture_output=True)
     return p.stdout if p.returncode == 0 and p.stdout else None
@@ -118,6 +144,19 @@ def build() -> list[dict]:
     for year in CLASSES:
         rows = []
         ranked = rankings[rankings["class_year"] == year].drop_duplicates("player_id")
+        # the class's Tars recruits table (classes in high school): every player's measurables (Texas's own, UC Report's,
+        # what the school lists), and the UC Report / MaxPreps players below
+        data = at = None
+        measured_by_name: dict[str, dict] = {}
+        if year >= HS_CLASSES_FROM:
+            raw = kv_get(f"recruits:v1:{year}")
+            if raw:
+                data = json.loads(gzip.decompress(raw) if raw[:2] == b"\x1f\x8b" else raw)
+                at = {f: i for i, f in enumerate(data["fields"])}
+                for row in data["rows"]:
+                    if row[at["stars"]]:                                   # a 247 recruit's row: his measurables, by name and state
+                        state = data["schools"][row[at["school"]]][2]
+                        measured_by_name[name_key(f"{row[at['first']] or ''} {row[at['last']] or ''}", state)] = measured(row, at)
         extra = pd.DataFrame()
         if not commits.empty:
             extra = commits[(commits["class_year"] == year) & commits["committed_team"].fillna("").astype(str).str.strip().ne("")
@@ -152,25 +191,24 @@ def build() -> list[dict]:
                     committed = school_index(r.committed_team)
                 rating = num(getattr(r, "rating", None)) if source == "ranked" else None
                 hs = re.sub(r"\s*\([^()]*\)\s*$", "", str(getattr(r, "high_school", "") or "")).strip()
+                m = {"height": inches(getattr(r, "height", None)), "weight": num(getattr(r, "weight", None))}
+                m = {k: v for k, v in m.items() if v} | measured_by_name.get(name_key(str(r.name), state), {})
                 rows.append([pid, str(r.name), str(r.position or ""), stars_of(rating, num(getattr(r, "rating", None)) if source == "commit" else None), rating,
                              int(num(r.national_rank)) if num(getattr(r, "national_rank", None)) else None,
                              where[0], where[1], where[2], city, state, hs,
                              signed if signed is not None else committed, committed, sorted(offers), sorted(official), sorted(unofficial),
-                             images.get(pid)])
+                             images.get(pid), m or None])
         if rows:
             entries.append({"key": f"recruit-map:v1:{year}", "value": json.dumps({
                 "classYear": year, "builtAt": built_at,
                 "fields": ["id", "name", "position", "stars", "rating", "rank", "lon", "lat", "exact", "city", "state", "highSchool",
-                           "landed", "committed", "offers", "officialVisits", "unofficialVisits", "headshot"],
+                           "landed", "committed", "offers", "officialVisits", "unofficialVisits", "headshot", "measurables"],
                 "players": rows}, separators=(",", ":"))})
         print(f"{year}: {len(rows):,} 247 recruits on the map ({missing[year]} without a place)")
 
         # the high school players Tars knows (UC Report, MaxPreps) who aren't one of those 247 recruits
-        if year >= HS_CLASSES_FROM:
-            raw = kv_get(f"recruits:v1:{year}")
-            if raw:
-                data = json.loads(gzip.decompress(raw) if raw[:2] == b"\x1f\x8b" else raw)
-                at = {f: i for i, f in enumerate(data["fields"])}
+        if data:
+            if True:
                 # each high school once ([name, city, state, longitude, latitude, exact]); a player points to his
                 places, school_at, hs_schools, hs_rows = {}, {}, [], []
                 for row in data["rows"]:
@@ -188,7 +226,8 @@ def build() -> list[dict]:
                     if school_at[i] is None:
                         continue
                     hs_rows.append([row[at["ucId"]] or row[at["tarsId"]] or None, f"{row[at['first']] or ''} {row[at['last']] or ''}".strip(),
-                                    row[at["position"]] or "", school_at[i], 1 if row[at["ucId"]] else 0, 1 if row[at["maxpreps"]] else 0])
+                                    row[at["position"]] or "", school_at[i], 1 if row[at["ucId"]] else 0, 1 if row[at["maxpreps"]] else 0,
+                                    measured(row, at) or None])
                 # UC Report's prospects (on the map by default) apart from the MaxPreps-only roster players (~10x as many,
                 # one checkbox): each file with only the schools its players are at
                 for layer, keep in (("uc", lambda row: row[4]), ("mp", lambda row: not row[4])):
@@ -197,7 +236,7 @@ def build() -> list[dict]:
                     renum = {old: new for new, old in enumerate(used)}
                     entries.append({"key": f"recruit-map:v1:{year}:{layer}", "value": json.dumps({
                         "classYear": year, "builtAt": built_at, "schools": [hs_schools[i] for i in used],
-                        "fields": ["id", "name", "position", "school", "uc", "maxpreps"],
+                        "fields": ["id", "name", "position", "school", "uc", "maxpreps", "measurables"],
                         "players": [row[:3] + [renum[row[3]]] + row[4:] for row in rows_]}, separators=(",", ":"))})
                 print(f"{year}: {len(hs_rows):,} more high school players (UC Report / MaxPreps)")
 
