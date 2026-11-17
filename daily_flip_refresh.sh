@@ -60,5 +60,6 @@ step fatal $PY bayes_layer.py
 step fatal $PY train_flip_destination_model.py
 step ok    $PY train_commit_destination_model.py   # where uncommitted recruits commit (Commit Watch); keeps yesterday's if it fails
 step fatal $PY export_for_tars.py
+step ok    $PY export_map_for_tars.py              # Recruiting → Map: every class's recruits, offers and visits, and the high school players
 
 echo "=== done in $(( SECONDS / 60 ))m $(( SECONDS % 60 ))s ==="
