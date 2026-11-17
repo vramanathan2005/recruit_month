@@ -387,16 +387,18 @@ def parse_timeline_events(html: str, recruit: RankingRow) -> list[TimelineEventR
 
 
 def timeline_school_from_body(body: str, event_type: str, player_name: str) -> str:
+    # The page is his own timeline, so his name only anchors the sentence: 247 writes it without the suffix his ranking
+    # has ("Briceson Thrower commits to Texas Longhorns" on Briceson Thrower Jr.'s page), and matching the full name
+    # dropped every event of 20 ranked 2027 recruits, his Texas commitment among them (Nov 17 2026).
     body = norm_space(body)
-    escaped_name = re.escape(player_name)
     patterns = {
-        "Commitment": rf"{escaped_name}\s+commits to\s+(.+)$",
-        "Decommit": rf"{escaped_name}\s+decommits from\s+(.+)$",
-        "Signing": rf"{escaped_name}\s+signs with\s+(.+)$",
-        "Enrollment": rf"{escaped_name}\s+enrolls at\s+(.+)$",
-        "Offer": rf"(.+?)\s+offers?\s+{escaped_name}$",
-        "Official Visit": rf"{escaped_name}\s+officially visits\s+(.+)$",
-        "Unofficial Visit": rf"{escaped_name}\s+unofficially visits\s+(.+)$",
+        "Commitment": r"\s+commits to\s+(.+)$",
+        "Decommit": r"\s+decommits from\s+(.+)$",
+        "Signing": r"\s+signs with\s+(.+)$",
+        "Enrollment": r"\s+enrolls at\s+(.+)$",
+        "Offer": r"^(.+?)\s+offers?\s+\S.*$",
+        "Official Visit": r"\s+officially visits\s+(.+)$",
+        "Unofficial Visit": r"\s+unofficially visits\s+(.+)$",
     }
     pattern = patterns.get(event_type)
     if not pattern:

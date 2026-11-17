@@ -20,4 +20,11 @@ for html in (direct, browser):
     rows = s.parse_timeline_events(html, RECRUIT)
     assert [(r.event_type, r.event_date, r.school) for r in rows] == [("Official Visit", "6/11/2026", "Florida Gators")], rows
 
+# 247 leaves his suffix off: "Briceson Thrower commits to Texas Longhorns" on Briceson Thrower Jr.'s page (Nov 17 2026)
+JR = s.RankingRow(2027, "46155048", "Briceson Thrower Jr.", "https://247sports.com/player/briceson-thrower-jr-46155048/", *[""] * 12)
+for item, want in (('<b>June 06, 2026: Commitment</b><p>Briceson Thrower commits to Texas Longhorns</p>', ("Commitment", "6/6/2026", "Texas Longhorns")),
+                   ('<b>April 23, 2026: Offer</b><p>Georgia Bulldogs offer Briceson Thrower</p>', ("Offer", "4/23/2026", "Georgia Bulldogs"))):
+    rows = s.parse_timeline_events(page(item), JR)
+    assert [(r.event_type, r.event_date, r.school) for r in rows] == [want], rows
+
 print("parse timeline: ok")
