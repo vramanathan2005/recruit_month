@@ -7,6 +7,8 @@ team, any conference or any set of them:
     recruit-map:v1:<class>          247's recruits (Composite-ranked, and committed ones outside it): hometown, stars,
                                     rank, who offered him, who had him on an official or unofficial visit, where he
                                     committed and where he signed or enrolled
+    recruit-map:v1:draft            every NFL draft pick from 2015 (data/nfl_draft_history.csv, College Football Data):
+                                    his hometown, college, year, round and pick
     recruit-map:v1:<class>:hs       the high school players Tars knows from UC Report and MaxPreps rosters who aren't
                                     one of those 247 recruits (Tars's recruits:v1 tables), at their school's town;
                                     loaded only when the map shows every player
@@ -76,6 +78,16 @@ def build() -> list[dict]:
     timeline = pd.read_csv("data/timeline_events.csv", dtype={"player_id": str})
     commits = pd.read_csv("data/raw_commits.csv", dtype={"player_id": str}) if Path("data/raw_commits.csv").exists() else pd.DataFrame()
     conferences = json.loads((TARS / "research/recruiting_map/conferences.json").read_text())
+    colors = json.loads((TARS / "research/recruiting_map/colors.json").read_text()) if (TARS / "research/recruiting_map/colors.json").exists() else {}
+
+    def color_of(espn: str | None, key: str) -> str | None:
+        """The school's color for its dots (Texas's own burnt orange; a white primary gives way to its second color)."""
+        if key == "texas":
+            return "#bf5700"
+        c = colors.get(espn or "") or {}
+        main, alt = (c.get("color") or "").lower(), (c.get("alt") or "").lower()
+        light = lambda h: len(h) == 7 and sum(int(h[i:i + 2], 16) for i in (1, 3, 5)) > 690
+        return (alt if main and light(main) and alt and not light(alt) else main) or None
 
     # every school anyone heard from, once; a player's schools are indexes into it
     schools: dict[str, dict] = {}
@@ -88,7 +100,8 @@ def build() -> list[dict]:
             espn = re.search(r"/(\d+)\.png", s.get("logo") or "")
             campus = coords_for_team(s["key"])
             schools[s["key"]] = {"key": s["key"], "name": s["name"], "logo": s.get("logo"), "espn": espn.group(1) if espn else None,
-                                 "lon": round(campus[1], 3) if campus else None, "lat": round(campus[0], 3) if campus else None, "i": len(schools)}
+                                 "lon": round(campus[1], 3) if campus else None, "lat": round(campus[0], 3) if campus else None, "i": len(schools),
+                                 "color": color_of(espn.group(1) if espn else None, s["key"])}
         return schools[s["key"]]["i"]
 
     events = defaultdict(list)
@@ -137,14 +150,14 @@ def build() -> list[dict]:
                     committed = school_index(r.committed_team)
                 rating = num(getattr(r, "rating", None)) if source == "ranked" else None
                 hs = re.sub(r"\s*\([^()]*\)\s*$", "", str(getattr(r, "high_school", "") or "")).strip()
-                rows.append([pid, str(r.name), str(r.position or ""), stars_of(rating, num(getattr(r, "rating", None)) if source == "commit" else None),
+                rows.append([pid, str(r.name), str(r.position or ""), stars_of(rating, num(getattr(r, "rating", None)) if source == "commit" else None), rating,
                              int(num(r.national_rank)) if num(getattr(r, "national_rank", None)) else None,
                              where[0], where[1], where[2], city, state, hs,
                              signed if signed is not None else committed, committed, sorted(offers), sorted(official), sorted(unofficial)])
         if rows:
             entries.append({"key": f"recruit-map:v1:{year}", "value": json.dumps({
                 "classYear": year, "builtAt": built_at,
-                "fields": ["id", "name", "position", "stars", "rank", "lon", "lat", "exact", "city", "state", "highSchool",
+                "fields": ["id", "name", "position", "stars", "rating", "rank", "lon", "lat", "exact", "city", "state", "highSchool",
                            "landed", "committed", "offers", "officialVisits", "unofficialVisits"],
                 "players": rows}, separators=(",", ":"))})
         print(f"{year}: {len(rows):,} 247 recruits on the map ({missing[year]} without a place)")
@@ -177,6 +190,24 @@ def build() -> list[dict]:
                     "classYear": year, "builtAt": built_at, "schools": hs_schools,
                     "fields": ["id", "name", "position", "school", "uc", "maxpreps"], "players": hs_rows}, separators=(",", ":"))})
                 print(f"{year}: {len(hs_rows):,} more high school players (UC Report / MaxPreps)")
+
+    # every NFL draft pick from 2015, at his hometown, with his college (College Football Data's draft history)
+    draft_path = Path("data/nfl_draft_history.csv")
+    if draft_path.exists():
+        picks = []
+        for d in pd.read_csv(draft_path, dtype=str, encoding="utf-8-sig").fillna("").to_dict("records"):
+            lon, lat = num(d.get("HometownInfo Longitude")), num(d.get("HometownInfo Latitude"))
+            if lon is None or lat is None:
+                city, state = d.get("HometownInfo City") or "", d.get("HometownInfo State") or ""
+                where = place(city, state)
+                if not where:
+                    continue
+                lon, lat = where[0], where[1]
+            picks.append([d.get("Name"), d.get("Position"), school_index(d.get("CollegeTeam")), int(num(d.get("Year")) or 0), int(num(d.get("Round")) or 0),
+                          int(num(d.get("Overall")) or 0), d.get("NflTeam"), round(lon, 3), round(lat, 3), d.get("HometownInfo City") or "", d.get("HometownInfo State") or ""])
+        entries.append({"key": "recruit-map:v1:draft", "value": json.dumps({"builtAt": built_at, "fields": ["name", "position", "college", "year", "round", "pick",
+                        "nflTeam", "lon", "lat", "city", "state"], "players": picks}, separators=(",", ":"))})
+        print(f"{len(picks):,} NFL draft picks on the map")
 
     for s in schools.values():
         s["conference"] = {season: by.get(s["espn"]) for season, by in conferences.items() if s["espn"] and by.get(s["espn"])}
