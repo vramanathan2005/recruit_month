@@ -568,14 +568,44 @@ def scrape_paged(
     max_pages: int | None,
     base_params: dict[str, str] | None = None,
 ) -> list:
+    rows = paged_pass(fetcher, url, class_year, parser, label, max_pages, base_params, fetcher.refresh_for(class_year))
+    if not rows or not fetcher.refresh_for(class_year):
+        return rows
+    # 247 orders players tied on a rating differently from one request to the next, so its pages overlap: a player
+    # shows on two pages and another on none. Nov 17 2026: 111 repeats on 2027's Composite rankings and ~100 ranked
+    # commits (Jake Hildebrand, Keldrid Ben...) never read, so no timeline and no flip odds. A page holds a fixed count,
+    # so the rows read are how many players there are: download the pages again (fresh), keeping each player not yet
+    # seen, until every one has been read.
+    expected = len(rows)
+    by_id: dict[str, object] = {}
+    for row in rows:
+        by_id.setdefault(row.player_id, row)
+    for attempt in range(2, REPAGE_PASSES + 1):
+        if len(by_id) >= expected:
+            break
+        print(f"{class_year} {label}: {expected - len(by_id)} of {expected} players hidden by page overlap; pass {attempt}", flush=True)
+        for row in paged_pass(fetcher, url, class_year, parser, label, max_pages, base_params, FORCE):
+            by_id.setdefault(row.player_id, row)
+    if len(by_id) < expected:
+        print(f"!! {class_year} {label}: {expected - len(by_id)} of {expected} players still unread after {REPAGE_PASSES} passes", flush=True)
+    return list(by_id.values())
+
+
+# Passes over a paged list until every player on it has been read; FORCE as `refresh` skips any cached page
+REPAGE_PASSES = 4
+FORCE = "force"
+
+
+def paged_pass(fetcher, url, class_year, parser, label, max_pages, base_params, refresh) -> list:
     rows = []
     page = 1
     while max_pages is None or page <= max_pages:
         params = dict(base_params or {})
         params["Page"] = str(page)
-        html = fetcher.get(url, params=params, refresh=fetcher.refresh_for(class_year))
+        html = fetcher.get(url, params=params, refresh=refresh)
         page_rows = parser(html, class_year)
-        print(f"{class_year} {label} page {page}: {len(page_rows)} rows", flush=True)
+        if refresh != FORCE:
+            print(f"{class_year} {label} page {page}: {len(page_rows)} rows", flush=True)
         if not page_rows:
             break
         rows.extend(page_rows)
