@@ -311,6 +311,74 @@ def parse_commits_page(html: str, class_year: int) -> list[CommitRow]:
     return rows
 
 
+TEAM_COMMIT_DATE_RE = re.compile(r"\b(?:Commit(?:ted)?|Signed|Enrolled)\s*:?\s*(\d{1,2}/\d{1,2}/\d{4})")
+
+
+def parse_team_index(html: str, class_year: int) -> list[tuple[str, str]]:
+    """A class's team rankings page: each team's 247 slug and name, for its own commits page."""
+    soup = BeautifulSoup(html, "html.parser")
+    teams: dict[str, str] = {}
+    for a in soup.select("a[href]"):
+        m = re.search(rf"/college/([^/]+)/season/{class_year}-football/commits", a.get("href", ""), re.I)
+        name = text_or_empty(a)
+        if m and name and not re.match(r"^[\d.]+$|^\d+ commits?$", name, re.I):
+            teams.setdefault(m.group(1).lower(), name)
+    return list(teams.items())
+
+
+def parse_team_commits_page(html: str, class_year: int, team: str) -> list[CommitRow]:
+    """One team's commits page (247's /college/<team>/Season/<year>-Football/Commits/): every commit, rated or not. The
+    class-wide commits page lists only rated recruits, so an unrated commit (Raymond Hudson, Texas's from Clemson on
+    Oct 26 2026) was on no page Tars read (Nov 17 2026). The page is one school's, so its rows carry no school logo."""
+    soup = BeautifulSoup(html, "html.parser")
+    rows: list[CommitRow] = []
+    for item in soup.select("li.ri-page__list-item"):
+        name_link = item.select_one("a.ri-page__name-link") or item.find("a", href=re.compile(r"/player/", re.I))
+        if not name_link:
+            continue
+        profile_url = urljoin(BASE, name_link.get("href", ""))
+        player_id = player_id_from_url(profile_url)
+        if not player_id:
+            continue
+        status = text_or_empty(item.select_one("div.status"))
+        date_match = TEAM_COMMIT_DATE_RE.search(status) or TEAM_COMMIT_DATE_RE.search(item.get_text(" ", strip=True))
+        metrics = text_or_empty(item.select_one("div.metrics"))
+        height, weight = ([part.strip() for part in metrics.split("/", 1)] if "/" in metrics else ["", ""])
+        meta = item.select_one("span.meta")
+        rows.append(CommitRow(
+            class_year=class_year, player_id=player_id, name=text_or_empty(name_link), profile_url=profile_url,
+            high_school=norm_space(meta.get_text(" ", strip=True)) if meta else "", position=text_or_empty(item.select_one("div.position")),
+            height=height, weight=weight, rating=text_or_empty(item.select_one("span.score")),
+            national_rank=text_or_empty(item.select_one("a.natrank")), position_rank=text_or_empty(item.select_one("a.posrank")),
+            state_rank=text_or_empty(item.select_one("a.sttrank")), committed_team=team,
+            committed_date=date_match.group(1) if date_match else ""))
+    return rows
+
+
+def scrape_team_commits(fetcher: "Fetcher", class_year: int, have: set[str]) -> list[CommitRow]:
+    """Every team's commits page for a class, Texas first; only the commits no class-wide page had (`have`)."""
+    teams: dict[str, str] = {}
+    for page in range(1, 12):
+        html = fetcher.get(f"{BASE}/Season/{class_year}-Football/CompositeTeamRankings/", params={"Page": str(page)}, refresh=fetcher.refresh_for(class_year))
+        found = [t for t in parse_team_index(html, class_year) if t[0] not in teams]
+        if not found:
+            break
+        teams.update(found)
+    order = sorted(teams.items(), key=lambda t: t[0] != "texas")
+    rows: list[CommitRow] = []
+    for slug, team in order:
+        try:
+            html = fetcher.get(f"{BASE}/college/{slug}/Season/{class_year}-Football/Commits/", refresh=fetcher.refresh_for(class_year))
+        except requests.RequestException as error:
+            print(f"  {class_year} {team} commits page failed ({error})", flush=True)
+            continue
+        new = [r for r in parse_team_commits_page(html, class_year, team) if r.player_id not in have]
+        have.update(r.player_id for r in new)
+        rows.extend(new)
+    print(f"{class_year} team commits pages: {len(teams)} teams, {len(rows)} commits no class page listed", flush=True)
+    return rows
+
+
 def parse_recruitment_detail(html: str, recruit: RankingRow) -> RecruitmentDetailRow | None:
     soup = BeautifulSoup(html, "html.parser")
     script = soup.find("script", id="predictionList")
@@ -677,6 +745,8 @@ def main() -> int:
     parser.add_argument("--max-pages", type=int, default=None, help="Debug limit per source/year.")
     parser.add_argument("--skip-recruitment-details", action="store_true")
     parser.add_argument("--skip-commit-pages", action="store_true")
+    parser.add_argument("--skip-team-commits", action="store_true", help="Skip each team's own commits page (unrated commits)")
+    parser.add_argument("--team-commits-all-years", action="store_true", help="Team commits pages for classes not being refreshed too")
     parser.add_argument("--skip-timeline-events", action="store_true")
     parser.add_argument("--detail-limit", type=int, default=None, help="Debug limit for recruitment detail pages.")
     parser.add_argument("--detail-workers", type=int, default=6)
@@ -704,6 +774,9 @@ def main() -> int:
         )
         if not args.skip_commit_pages:
             commits.extend(scrape_paged(fetcher, commit_url, year, parse_commits_page, "commits", args.max_pages))
+            # and every team's own commits page, for the unrated commits the class page leaves off
+            if not args.skip_team_commits and (fetcher.refresh_for(year) or args.team_commits_all_years):
+                commits.extend(scrape_team_commits(fetcher, year, {c.player_id for c in commits if c.class_year == year}))
 
     # a class being recruited never has nobody ranked: writing it empty would drop it from every model
     empty = sorted(year for year in set(args.years) if fetcher.refresh_for(year) and not any(r.class_year == year for r in rankings))
