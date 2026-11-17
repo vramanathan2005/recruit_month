@@ -9,9 +9,9 @@ team, any conference or any set of them:
                                     committed and where he signed or enrolled
     recruit-map:v1:draft            every NFL draft pick from 2015 (data/nfl_draft_history.csv, College Football Data):
                                     his hometown, college, year, round and pick
-    recruit-map:v1:<class>:hs       the high school players Tars knows from UC Report and MaxPreps rosters who aren't
-                                    one of those 247 recruits (Tars's recruits:v1 tables), at their school's town;
-                                    loaded only when the map shows every player
+    recruit-map:v1:<class>:uc       the high school players Tars knows who aren't one of those 247 recruits (Tars's
+    recruit-map:v1:<class>:mp       recruits:v1 tables), at their school's town: UC Report's prospects (on the map by
+                                    default), and the MaxPreps-only roster players (a checkbox)
 
 Hometowns are placed from 247's "School (City, ST)" and the high schools' city and state (geography_features.py: city
 coordinates, else the state's center, marked approximate). Conferences come from Tars's
@@ -189,9 +189,16 @@ def build() -> list[dict]:
                         continue
                     hs_rows.append([row[at["ucId"]] or row[at["tarsId"]] or None, f"{row[at['first']] or ''} {row[at['last']] or ''}".strip(),
                                     row[at["position"]] or "", school_at[i], 1 if row[at["ucId"]] else 0, 1 if row[at["maxpreps"]] else 0])
-                entries.append({"key": f"recruit-map:v1:{year}:hs", "value": json.dumps({
-                    "classYear": year, "builtAt": built_at, "schools": hs_schools,
-                    "fields": ["id", "name", "position", "school", "uc", "maxpreps"], "players": hs_rows}, separators=(",", ":"))})
+                # UC Report's prospects (on the map by default) apart from the MaxPreps-only roster players (~10x as many,
+                # one checkbox): each file with only the schools its players are at
+                for layer, keep in (("uc", lambda row: row[4]), ("mp", lambda row: not row[4])):
+                    rows_ = [row for row in hs_rows if keep(row)]
+                    used = sorted({row[3] for row in rows_})
+                    renum = {old: new for new, old in enumerate(used)}
+                    entries.append({"key": f"recruit-map:v1:{year}:{layer}", "value": json.dumps({
+                        "classYear": year, "builtAt": built_at, "schools": [hs_schools[i] for i in used],
+                        "fields": ["id", "name", "position", "school", "uc", "maxpreps"],
+                        "players": [row[:3] + [renum[row[3]]] + row[4:] for row in rows_]}, separators=(",", ":"))})
                 print(f"{year}: {len(hs_rows):,} more high school players (UC Report / MaxPreps)")
 
     # every NFL draft pick from 2015, at his hometown, with his college (College Football Data's draft history)
