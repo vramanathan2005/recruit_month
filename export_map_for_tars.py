@@ -98,6 +98,17 @@ def kv_get(key: str) -> bytes | None:
     return p.stdout if p.returncode == 0 and p.stdout else None
 
 
+UC_HEADSHOTS = "https://ucreport.blob.core.windows.net/headshots/"
+
+
+def uc_headshot(stored: str | None) -> str | None:
+    """A UC Report player's photo as a full URL (Tars's recruits tables keep only the file name; lib/recruits.ts).
+    Nov 17 2026: the map's UC Report players showed initials though about half have a photo."""
+    if not stored:
+        return None
+    return stored if stored.startswith("http") else UC_HEADSHOTS + stored
+
+
 def build() -> list[dict]:
     built_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
     rankings = pd.read_csv("data/raw_rankings.csv", dtype={"player_id": str})
@@ -227,7 +238,7 @@ def build() -> list[dict]:
                         continue
                     hs_rows.append([row[at["ucId"]] or row[at["tarsId"]] or None, f"{row[at['first']] or ''} {row[at['last']] or ''}".strip(),
                                     row[at["position"]] or "", school_at[i], 1 if row[at["ucId"]] else 0, 1 if row[at["maxpreps"]] else 0,
-                                    measured(row, at) or None])
+                                    measured(row, at) or None, uc_headshot(row[at["headshot"]] if "headshot" in at else None)])
                 # UC Report's prospects (on the map by default) apart from the MaxPreps-only roster players (~10x as many,
                 # one checkbox): each file with only the schools its players are at
                 for layer, keep in (("uc", lambda row: row[4]), ("mp", lambda row: not row[4])):
@@ -236,7 +247,7 @@ def build() -> list[dict]:
                     renum = {old: new for new, old in enumerate(used)}
                     entries.append({"key": f"recruit-map:v1:{year}:{layer}", "value": json.dumps({
                         "classYear": year, "builtAt": built_at, "schools": [hs_schools[i] for i in used],
-                        "fields": ["id", "name", "position", "school", "uc", "maxpreps", "measurables"],
+                        "fields": ["id", "name", "position", "school", "uc", "maxpreps", "measurables", "headshot"],
                         "players": [row[:3] + [renum[row[3]]] + row[4:] for row in rows_]}, separators=(",", ":"))})
                 print(f"{year}: {len(hs_rows):,} more high school players (UC Report / MaxPreps)")
 
