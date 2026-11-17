@@ -147,6 +147,20 @@ def stars(rating: float) -> int | None:
     return 5 if rating >= 0.9834 else 4 if rating >= 0.89 else 3 if rating >= 0.797 else 2
 
 
+def stars247(score) -> int | None:
+    """247's own rating (its 0-100 scale) as stars, for a commit with no Composite rating yet."""
+    value = num(score)
+    if not value:
+        return None
+    return 5 if value >= 98 else 4 if value >= 90 else 3 if value >= 80 else 2
+
+
+def iso_us(day) -> str | None:
+    """247's M/D/YYYY as YYYY-MM-DD."""
+    m = re.match(r"^(\d{1,2})/(\d{1,2})/(\d{4})$", str(day or "").strip())
+    return f"{m.group(3)}-{int(m.group(1)):02d}-{int(m.group(2)):02d}" if m else None
+
+
 def num(value):
     try:
         v = float(value)
@@ -226,7 +240,16 @@ def build() -> list[dict]:
     m.load_on3_picks(BACKFILL)
     titles = headline_titles()
 
-    ids = list(dict.fromkeys(list(rankings["player_id"]) + list(board["player_id"])))
+    # committed recruits 247's class Commits pages list who aren't in its Composite rankings (no Composite rating yet):
+    # they reach Tars too, with 247's own stars and the school, and no flip odds (the flip model scores Composite-ranked
+    # recruits from their timelines). Nov 16 2026: Texas's Raymond Hudson, and ~1,200 more 2027 commits, were missing.
+    commits_path = Path("data/raw_commits.csv")
+    commit_rows = pd.read_csv(commits_path, dtype={"player_id": str}) if commits_path.exists() else pd.DataFrame(columns=["player_id", "class_year", "committed_team"])
+    commit_rows = commit_rows[commit_rows["class_year"].isin(LIVE_CLASSES) & commit_rows["committed_team"].fillna("").astype(str).str.strip().ne("")]
+    commit_only = commit_rows[~commit_rows["player_id"].isin(set(rankings["player_id"]) | set(board["player_id"]))].drop_duplicates("player_id")
+    committed_page = commit_only.set_index("player_id")
+
+    ids = list(dict.fromkeys(list(rankings["player_id"]) + list(board["player_id"]) + list(commit_only["player_id"])))
     ranked = rankings.set_index("player_id")
     live = board.set_index("player_id")
     dest_by = {pid: g.sort_values("if_he_flips", ascending=False) for pid, g in dest.groupby("player_id")}
@@ -266,28 +289,30 @@ def build() -> list[dict]:
             rk = rk.iloc[0]
         if isinstance(lv, pd.DataFrame):
             lv = lv.iloc[0]
-        base = rk if rk is not None else lv
-        rating = num(base.get("rating"))
-        hs = str(rk["high_school"]) if rk is not None and isinstance(rk.get("high_school"), str) else ""
+        cm = committed_page.loc[pid] if rk is None and lv is None and pid in committed_page.index else None
+        base = rk if rk is not None else lv if lv is not None else cm
+        rating = num(base.get("rating")) if cm is None else None          # a Composite rating; a commit-page one is 247's
+        hs_row = rk if rk is not None else cm
+        hs = str(hs_row["high_school"]) if hs_row is not None and isinstance(hs_row.get("high_school"), str) else ""
         hometown = re.search(r"\(([^()]*)\)\s*$", hs)
         events = sorted({(e["date"], e["type"], (e["school"] or {}).get("key")): e for e in events_by.get(pid, [])}.values(),
                         key=lambda e: e["date"], reverse=True)
         commit_events = [e for e in events if e["type"] in ("Commitment", "Decommit", "Signing", "Enrollment")]
-        committed_to = school(lv["committed_school"]) if lv is not None else (
+        committed_to = school(lv["committed_school"]) if lv is not None else school(cm["committed_team"]) if cm is not None else (
             commit_events[0]["school"] if commit_events and commit_events[0]["type"] != "Decommit" else None)
         player = {
             "id": pid, "name": str(base["name"]), "classYear": int(base["class_year"]), "position": str(base.get("position") or ""),
-            "rating": rating, "stars": stars(rating or 0),
+            "rating": rating, "stars": stars(rating or 0) if cm is None else stars247(cm.get("rating")),
             "nationalRank": num(rk.get("national_rank")) if rk is not None else None,
             "positionRank": num(rk.get("position_rank")) if rk is not None else None,
             "stateRank": num(rk.get("state_rank")) if rk is not None else None,
             "highSchool": re.sub(r"\s*\([^()]*\)\s*$", "", hs) or None, "hometown": hometown.group(1) if hometown else None,
-            "height": str(rk["height"]) if rk is not None and isinstance(rk.get("height"), str) else None,
-            "weight": num(rk.get("weight")) if rk is not None else None,
+            "height": str(hs_row["height"]) if hs_row is not None and isinstance(hs_row.get("height"), str) else None,
+            "weight": num(hs_row.get("weight")) if hs_row is not None else None,
             "headshot": images[pid].replace("width=70", "width=240") if pid in images else None,
             "profileUrl": str(base.get("profile_url") or "") or None,
             "committedTo": committed_to,
-            "commitDate": str(lv["commitment_date"]) if lv is not None else (commit_events[0]["date"] if committed_to and commit_events else None),
+            "commitDate": str(lv["commitment_date"]) if lv is not None else iso_us(cm["committed_date"]) if cm is not None else (commit_events[0]["date"] if committed_to and commit_events else None),
         }
         flip = None
         if lv is not None:
@@ -365,6 +390,9 @@ def build() -> list[dict]:
                         # Texas offered him (247 timeline): the Boards color a card by commitment and Texas offer
                         "texasOffer": any((e["school"] or {}).get("key") == "texas" for e in offers),
                         "chance": flip["chance"] if flip else None, "label": flip["label"] if flip else None})
+        if cm is not None and committed_to:
+            # on the Commits tab and Texas's projected depth chart (the board's commitments), without flip odds
+            board_rows.append(player | {"flip": None, "summary": summary})
         if flip:
             board_rows.append(player | {"flip": {k: v for k, v in flip.items() if k not in ("reasons", "destinations")}
                                         | {"reasons": flip["reasons"][:3], "destinations": [d | {"why": []} for d in flip["destinations"][:3]]},
@@ -376,13 +404,14 @@ def build() -> list[dict]:
                             "coverage": coverage_by.get(pid, []), "builtAt": built_at}
         entries.append({"key": f"recruiting:player:{pid}", "value": json.dumps(profile, separators=(",", ":"))})
 
-    board_rows.sort(key=lambda r: r["flip"]["chance"], reverse=True)
+    board_rows.sort(key=lambda r: r["flip"]["chance"] if r["flip"] else -1, reverse=True)
     meta = {"builtAt": built_at, "asOf": str(board["snapshot_date"].max()), "classes": LIVE_CLASSES}
     entries.append({"key": "recruiting:board", "value": json.dumps(meta | {"players": board_rows}, separators=(",", ":"))})
     entries.append({"key": "recruiting:index", "value": json.dumps(meta | {"players": index}, separators=(",", ":"))})
     uncommitted_rows.sort(key=lambda r: (r["nationalRank"] is None, r["nationalRank"] or 0, -(r["rating"] or 0)))
     entries.append({"key": "recruiting:uncommitted", "value": json.dumps(meta | {"players": uncommitted_rows}, separators=(",", ":"))})
-    print(f"{len(index):,} recruits ({len(board_rows):,} live commitments, {len(uncommitted_rows):,} uncommitted with a prediction), {len(entries):,} KV entries, "
+    print(f"{len(commit_only):,} commits outside the Composite rankings added; "
+          f"{len(index):,} recruits ({len(board_rows):,} live commitments, {len(uncommitted_rows):,} uncommitted with a prediction), {len(entries):,} KV entries, "
           f"{sum(len(e['value']) for e in entries) / 1e6:.1f} MB")
     return entries
 

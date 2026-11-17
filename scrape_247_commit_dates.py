@@ -283,9 +283,12 @@ def parse_commits_page(html: str, class_year: int) -> list[CommitRow]:
             height, weight = [part.strip() for part in metrics.split("/", 1)]
 
         school_node = item.select_one("span.meta")
-        team = first_attr(item.select("div.status img, div.commitment-list__status img, img"), "title")
-        if team == text_or_empty(name_link):
-            team = ""
+        # the school's logo: an image titled with something other than his own name (the first image in the row is his
+        # headshot, so every commit's school had come out blank, Nov 16 2026)
+        name = text_or_empty(name_link)
+        schools = [img.get("title", "").strip() for img in item.select("div.status img, div.commitment-list__status img, img")]
+        schools = [title for title in schools if title and title != name]
+        team = schools[-1] if schools else ""
 
         rows.append(
             CommitRow(
