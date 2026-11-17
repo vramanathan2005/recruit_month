@@ -78,6 +78,8 @@ def build() -> list[dict]:
     timeline = pd.read_csv("data/timeline_events.csv", dtype={"player_id": str})
     commits = pd.read_csv("data/raw_commits.csv", dtype={"player_id": str}) if Path("data/raw_commits.csv").exists() else pd.DataFrame()
     conferences = json.loads((TARS / "research/recruiting_map/conferences.json").read_text())
+    # 247's headshots (build_player_image_index.py), for the map's list and cards
+    images = dict(pd.read_csv("data/player_images.csv", dtype={"player_id": str}).values) if Path("data/player_images.csv").exists() else {}
     colors = json.loads((TARS / "research/recruiting_map/colors.json").read_text()) if (TARS / "research/recruiting_map/colors.json").exists() else {}
 
     def color_of(espn: str | None, key: str) -> str | None:
@@ -153,12 +155,13 @@ def build() -> list[dict]:
                 rows.append([pid, str(r.name), str(r.position or ""), stars_of(rating, num(getattr(r, "rating", None)) if source == "commit" else None), rating,
                              int(num(r.national_rank)) if num(getattr(r, "national_rank", None)) else None,
                              where[0], where[1], where[2], city, state, hs,
-                             signed if signed is not None else committed, committed, sorted(offers), sorted(official), sorted(unofficial)])
+                             signed if signed is not None else committed, committed, sorted(offers), sorted(official), sorted(unofficial),
+                             images.get(pid)])
         if rows:
             entries.append({"key": f"recruit-map:v1:{year}", "value": json.dumps({
                 "classYear": year, "builtAt": built_at,
                 "fields": ["id", "name", "position", "stars", "rating", "rank", "lon", "lat", "exact", "city", "state", "highSchool",
-                           "landed", "committed", "offers", "officialVisits", "unofficialVisits"],
+                           "landed", "committed", "offers", "officialVisits", "unofficialVisits", "headshot"],
                 "players": rows}, separators=(",", ":"))})
         print(f"{year}: {len(rows):,} 247 recruits on the map ({missing[year]} without a place)")
 
